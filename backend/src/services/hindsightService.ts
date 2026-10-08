@@ -124,7 +124,10 @@ export class HindsightService {
     }
 
     // 2. Fallback: Intelligent semantic & keyword matching on customer-isolated persistent memories
-    const customerMemories = storageService.getMemories(customerId, userId);
+    let customerMemories = storageService.getMemories(customerId, userId);
+    if (!customerMemories.length && userId) {
+      customerMemories = storageService.getMemories(customerId);
+    }
     if (!customerMemories.length) {
       return [];
     }
@@ -188,7 +191,14 @@ export class HindsightService {
         lowerQuery.includes('what did they say') ||
         lowerQuery.includes('customer history') ||
         lowerQuery.includes('account history') ||
-        lowerQuery.includes('customer notes')
+        lowerQuery.includes('customer notes') ||
+        lowerQuery.includes('concern') ||
+        lowerQuery.includes('concerns') ||
+        lowerQuery.includes('blocker') ||
+        lowerQuery.includes('blockers') ||
+        lowerQuery.includes('requirement') ||
+        lowerQuery.includes('requirements') ||
+        lowerQuery.includes('what were')
       );
 
       if (isHistoryMetaQuery && customerMemories.length > 0) {

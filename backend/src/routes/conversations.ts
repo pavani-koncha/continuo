@@ -101,9 +101,22 @@ router.post('/:id/messages', async (req: AuthenticatedRequest, res: Response) =>
     // 1. Add customer message to conversation
     storageService.addMessageToConversation(conversationId, customerMsg);
 
+    // Check if the query refers to a specific customer by name (e.g. "What were Navya's concerns from our previous conversation?")
+    let contextCustomer = customer;
+    const userCustomers = storageService.getCustomers(req.user?.id);
+    const candidateCustomers = userCustomers.length > 0 ? userCustomers : storageService.getCustomers();
+    for (const c of candidateCustomers) {
+      const cFirstName = c.name.split(' ')[0].toLowerCase();
+      const cFullName = c.name.toLowerCase();
+      if ((cFirstName.length > 2 && text.toLowerCase().includes(cFirstName)) || text.toLowerCase().includes(cFullName)) {
+        contextCustomer = c;
+        break;
+      }
+    }
+
     // 2. Retrieve relevant persistent memories from Hindsight (isolated per customer and user)
     const recalledMemories = await hindsightService.retrieveMemories(
-      customer.id,
+      contextCustomer.id,
       text.trim(),
       4,
       req.user?.id
@@ -111,18 +124,19 @@ router.post('/:id/messages', async (req: AuthenticatedRequest, res: Response) =>
 
     // 3. Generate personalized response and intelligence via Groq
     const aiResult = await groqService.generateSupportResponse(
-      customer,
+      contextCustomer,
       conversation,
       text.trim(),
       recalledMemories
     );
 
     // 4. Retain new extracted memories into Hindsight
+    const targetMemoryCustomerId = contextCustomer.id !== customer.id ? contextCustomer.id : customer.id;
     const extractedMemoryItems = [];
     for (const mem of aiResult.extractedMemories) {
       const stored = await hindsightService.storeMemory({
         userId: req.user?.id,
-        customerId: customer.id,
+        customerId: targetMemoryCustomerId,
         conversationId,
         content: mem.content,
         category: mem.category,
