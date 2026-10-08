@@ -1,24 +1,28 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { storageService } from '../services/storageService.js';
 import { Customer } from '../types.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET all customers
-router.get('/', (req: Request, res: Response) => {
+// Protect all customer routes with authentication
+router.use(requireAuth);
+
+// GET all customers for authenticated user
+router.get('/', (req: AuthenticatedRequest, res: Response) => {
   try {
-    const customers = storageService.getCustomers();
+    const customers = storageService.getCustomers(req.user?.id);
     res.json(customers);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch customers', details: err.message });
   }
 });
 
-// GET single customer
-router.get('/:id', (req: Request, res: Response) => {
+// GET single customer for authenticated user
+router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    const customer = storageService.getCustomer(id);
+    const customer = storageService.getCustomer(id, req.user?.id);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
@@ -28,8 +32,8 @@ router.get('/:id', (req: Request, res: Response) => {
   }
 });
 
-// CREATE new customer
-router.post('/', (req: Request, res: Response) => {
+// CREATE new customer for authenticated user
+router.post('/', (req: AuthenticatedRequest, res: Response) => {
   try {
     const { name, company, email, product, initialNotes, tags } = req.body;
 
@@ -39,12 +43,13 @@ router.post('/', (req: Request, res: Response) => {
 
     const newCustomer: Customer = {
       id: crypto.randomUUID(),
+      userId: req.user?.id,
       name: name.trim(),
       company: company.trim(),
       email: email.trim(),
       product: (product || 'General Support').trim(),
       initialNotes: (initialNotes || '').trim(),
-      tags: Array.isArray(tags) ? tags : typeof tags === 'string' && tags ? tags.split(',').map(t => t.trim()) : [],
+      tags: Array.isArray(tags) ? tags : typeof tags === 'string' && tags ? tags.split(',').map((t: string) => t.trim()) : [],
       health: 'Healthy',
       healthReason: 'Initial onboarding complete, active engagement',
       summary: `${name} from ${company} (${product || 'General Product'}). Initial profile created.`,
@@ -59,11 +64,11 @@ router.post('/', (req: Request, res: Response) => {
   }
 });
 
-// UPDATE customer
-router.put('/:id', (req: Request, res: Response) => {
+// UPDATE customer for authenticated user
+router.put('/:id', (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    const updated = storageService.updateCustomer(id, req.body);
+    const updated = storageService.updateCustomer(id, req.body, req.user?.id);
     if (!updated) {
       return res.status(404).json({ error: 'Customer not found' });
     }
@@ -73,11 +78,11 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 });
 
-// DELETE customer
-router.delete('/:id', (req: Request, res: Response) => {
+// DELETE customer for authenticated user
+router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    const success = storageService.deleteCustomer(id);
+    const success = storageService.deleteCustomer(id, req.user?.id);
     if (!success) {
       return res.status(404).json({ error: 'Customer not found' });
     }

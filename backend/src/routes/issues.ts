@@ -1,29 +1,38 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { storageService } from '../services/storageService.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET issues
-router.get('/', (req: Request, res: Response) => {
+router.use(requireAuth);
+
+// GET issues for authenticated user
+router.get('/', (req: AuthenticatedRequest, res: Response) => {
   try {
     const customerId = req.query.customerId as string | undefined;
-    const issues = storageService.getIssues(customerId);
+    const issues = storageService.getIssues(customerId, req.user?.id);
     res.json(issues);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch issues', details: err.message });
   }
 });
 
-// CREATE issue
-router.post('/', (req: Request, res: Response) => {
+// CREATE issue for authenticated user
+router.post('/', (req: AuthenticatedRequest, res: Response) => {
   try {
     const { customerId, title, description, severity } = req.body;
     if (!customerId || !title) {
       return res.status(400).json({ error: 'customerId and title are required' });
     }
 
+    const customer = storageService.getCustomer(customerId, req.user?.id);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
     const issue = storageService.addIssue({
       id: crypto.randomUUID(),
+      userId: req.user?.id,
       customerId,
       title,
       description: description || '',
@@ -39,10 +48,10 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 // UPDATE issue status (resolve / reopen)
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    const updated = storageService.updateIssue(id, req.body);
+    const updated = storageService.updateIssue(id, req.body, req.user?.id);
     if (!updated) {
       return res.status(404).json({ error: 'Issue not found' });
     }

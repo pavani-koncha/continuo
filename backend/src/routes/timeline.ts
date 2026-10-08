@@ -1,13 +1,16 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { storageService } from '../services/storageService.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET timeline events
-router.get('/', (req: Request, res: Response) => {
+router.use(requireAuth);
+
+// GET timeline events for authenticated user
+router.get('/', (req: AuthenticatedRequest, res: Response) => {
   try {
     const customerId = req.query.customerId as string | undefined;
-    const timeline = storageService.getTimeline(customerId);
+    const timeline = storageService.getTimeline(customerId, req.user?.id);
     res.json(timeline);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch timeline', details: err.message });

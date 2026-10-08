@@ -1,16 +1,20 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { storageService } from '../services/storageService.js';
 import { hindsightService } from '../services/hindsightService.js';
 import { groqService } from '../services/groqService.js';
 import { Conversation, Message } from '../types.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET conversations (optionally filter by customerId)
-router.get('/', (req: Request, res: Response) => {
+// Protect all conversation routes with authentication
+router.use(requireAuth);
+
+// GET conversations (optionally filter by customerId, strictly for authenticated user)
+router.get('/', (req: AuthenticatedRequest, res: Response) => {
   try {
     const customerId = req.query.customerId as string | undefined;
-    const conversations = storageService.getConversations(customerId);
+    const conversations = storageService.getConversations(customerId, req.user?.id);
     res.json(conversations);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch conversations', details: err.message });
@@ -18,10 +22,10 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 // GET single conversation
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    const conversation = storageService.getConversation(id);
+    const conversation = storageService.getConversation(id, req.user?.id);
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
@@ -32,23 +36,24 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 // POST create new conversation thread
-router.post('/', (req: Request, res: Response) => {
+router.post('/', (req: AuthenticatedRequest, res: Response) => {
   try {
     const { customerId, title } = req.body;
     if (!customerId) {
       return res.status(400).json({ error: 'customerId is required' });
     }
 
-    const customer = storageService.getCustomer(customerId);
+    const customer = storageService.getCustomer(customerId, req.user?.id);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
 
-    const existingConvs = storageService.getConversations(customerId);
+    const existingConvs = storageService.getConversations(customerId, req.user?.id);
     const threadNumber = existingConvs.length + 1;
 
     const newConversation: Conversation = {
       id: crypto.randomUUID(),
+      userId: req.user?.id,
       customerId,
       title: title?.trim() || `Support Conversation #${threadNumber}`,
       createdAt: new Date().toISOString(),
@@ -64,7 +69,7 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 // POST send message in conversation
-router.post('/:id/messages', async (req: Request, res: Response) => {
+router.post('/:id/messages', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const conversationId = req.params.id as string;
     const { text } = req.body;
@@ -73,12 +78,12 @@ router.post('/:id/messages', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Message text cannot be empty' });
     }
 
-    const conversation = storageService.getConversation(conversationId);
+    const conversation = storageService.getConversation(conversationId, req.user?.id);
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    const customer = storageService.getCustomer(conversation.customerId);
+    const customer = storageService.getCustomer(conversation.customerId, req.user?.id);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
@@ -96,11 +101,12 @@ router.post('/:id/messages', async (req: Request, res: Response) => {
     // 1. Add customer message to conversation
     storageService.addMessageToConversation(conversationId, customerMsg);
 
-    // 2. Retrieve relevant persistent memories from Hindsight
+    // 2. Retrieve relevant persistent memories from Hindsight (isolated per customer and user)
     const recalledMemories = await hindsightService.retrieveMemories(
       customer.id,
       text.trim(),
-      4
+      4,
+      req.user?.id
     );
 
     // 3. Generate personalized response and intelligence via Groq
@@ -115,6 +121,7 @@ router.post('/:id/messages', async (req: Request, res: Response) => {
     const extractedMemoryItems = [];
     for (const mem of aiResult.extractedMemories) {
       const stored = await hindsightService.storeMemory({
+        userId: req.user?.id,
         customerId: customer.id,
         conversationId,
         content: mem.content,
@@ -127,16 +134,17 @@ router.post('/:id/messages', async (req: Request, res: Response) => {
     // 5. Save any detected issues
     for (const issue of aiResult.detectedIssues) {
       if (issue.status === 'resolved') {
-        const existing = storageService.getIssues(customer.id).find(i => 
+        const existing = storageService.getIssues(customer.id, req.user?.id).find(i => 
           i.title.toLowerCase().includes(issue.title.toLowerCase()) || 
           issue.title.toLowerCase().includes(i.title.toLowerCase())
         );
         if (existing) {
-          storageService.updateIssue(existing.id, { status: 'resolved' });
+          storageService.updateIssue(existing.id, { status: 'resolved' }, req.user?.id);
         }
       } else {
         storageService.addIssue({
           id: crypto.randomUUID(),
+          userId: req.user?.id,
           customerId: customer.id,
           title: issue.title,
           description: issue.description,
@@ -154,7 +162,7 @@ router.post('/:id/messages', async (req: Request, res: Response) => {
         ...(aiResult.customerHealth && { health: aiResult.customerHealth }),
         ...(aiResult.healthReason && { healthReason: aiResult.healthReason }),
         ...(aiResult.customerSummary && { summary: aiResult.customerSummary })
-      });
+      }, req.user?.id);
     }
 
     // 7. Create Continuo AI response message with explainability & Next Action
@@ -176,6 +184,7 @@ router.post('/:id/messages', async (req: Request, res: Response) => {
     if (aiResult.recommendedNextAction) {
       storageService.addTimelineEvent({
         id: crypto.randomUUID(),
+        userId: req.user?.id,
         customerId: customer.id,
         type: 'action_recommended',
         title: `Recommended Next Action: ${aiResult.recommendedNextAction.action}`,
@@ -186,7 +195,7 @@ router.post('/:id/messages', async (req: Request, res: Response) => {
     }
 
     // Return the updated conversation along with the newly created messages
-    const updatedConv = storageService.getConversation(conversationId);
+    const updatedConv = storageService.getConversation(conversationId, req.user?.id);
     res.json({
       conversation: updatedConv,
       customerMessage: customerMsg,

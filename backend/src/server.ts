@@ -6,6 +6,7 @@ import path from 'path';
 // Load environment variables
 dotenv.config();
 
+import authRouter from './routes/auth.js';
 import customersRouter from './routes/customers.js';
 import conversationsRouter from './routes/conversations.js';
 import memoriesRouter from './routes/memories.js';
@@ -42,6 +43,7 @@ app.use((req, res, next) => {
 });
 
 // API Routes
+app.use('/api/auth', authRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/memories', memoriesRouter);
@@ -85,5 +87,6 @@ app.listen(PORT, () => {
   console.log(` Port: ${PORT}`);
   console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(` Hindsight URL: ${process.env.HINDSIGHT_API_URL || 'https://api.hindsight.vectorize.io'}`);
+  console.log(` Authentication: JWT Multi-tenant Active`);
   console.log(`=========================================`);
 });

@@ -10,10 +10,14 @@ import { InsightsView } from './components/InsightsView';
 import { SettingsView } from './components/SettingsView';
 import { AddCustomerModal } from './components/AddCustomerModal';
 import { AskContinuoModal } from './components/AskContinuoModal';
-import { Customer, DashboardStats } from './types';
+import { AuthView } from './components/AuthView';
+import { Customer, DashboardStats, User } from './types';
 import { api } from './services/api';
 
 export const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -24,13 +28,31 @@ export const App: React.FC = () => {
 
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [isAskContinuoOpen, setIsAskContinuoOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Check existing authentication session on mount
   useEffect(() => {
-    loadInitialData();
+    checkAuth();
   }, []);
 
-  const loadInitialData = async () => {
+  const checkAuth = async () => {
+    setIsAuthChecking(true);
+    const token = api.getToken();
+    if (token) {
+      try {
+        const res = await api.getCurrentUser();
+        setCurrentUser(res.user);
+        loadUserData();
+      } catch (err) {
+        console.warn('Session expired or invalid token:', err);
+        api.signOut();
+        setCurrentUser(null);
+      }
+    }
+    setIsAuthChecking(false);
+  };
+
+  const loadUserData = async () => {
     setIsLoading(true);
     try {
       const [custList, statsData, statusData] = await Promise.all([
@@ -43,14 +65,31 @@ export const App: React.FC = () => {
       setStats(statsData);
       setStatusInfo(statusData);
 
-      if (custList.length > 0 && !selectedCustomer) {
+      if (custList.length > 0) {
         setSelectedCustomer(custList[0]);
+      } else {
+        setSelectedCustomer(null);
       }
     } catch (err) {
-      console.error('Error loading initial app data:', err);
+      console.error('Error loading user data:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleAuthSuccess = (user: User) => {
+    setCurrentUser(user);
+    loadUserData();
+  };
+
+  const handleSignOut = () => {
+    api.signOut();
+    setCurrentUser(null);
+    setCustomers([]);
+    setSelectedCustomer(null);
+    setDetailCustomer(null);
+    setStats(null);
+    setCurrentTab('dashboard');
   };
 
   const refreshCustomersAndStats = async () => {
@@ -104,6 +143,24 @@ export const App: React.FC = () => {
     setCurrentTab('customerDetail');
   };
 
+  // Auth Checking Loading Screen
+  if (isAuthChecking) {
+    return (
+      <div className="h-screen bg-[#090d16] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
+          <p className="text-xs text-slate-400 font-mono">Initializing Continuo Session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Protected View: If not authenticated, present the AuthView
+  if (!currentUser) {
+    return <AuthView onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // Authenticated Application Dashboard
   return (
     <div className="flex h-screen bg-[#090d16] text-slate-100 font-sans overflow-hidden">
       {/* Sidebar Navigation */}
@@ -117,6 +174,8 @@ export const App: React.FC = () => {
         customers={customers}
         selectedCustomer={selectedCustomer}
         onSelectCustomer={(cust) => setSelectedCustomer(cust)}
+        currentUser={currentUser}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Content Area */}
@@ -130,6 +189,8 @@ export const App: React.FC = () => {
           onOpenAskContinuo={() => setIsAskContinuoOpen(true)}
           onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
           statusInfo={statusInfo}
+          currentUser={currentUser}
+          onSignOut={handleSignOut}
         />
 
         {/* View Switcher */}

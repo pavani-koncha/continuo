@@ -1,7 +1,19 @@
 export type CustomerHealth = 'Healthy' | 'Needs Attention' | 'At Risk';
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+
 export interface Customer {
   id: string;
+  userId?: string;
   name: string;
   company: string;
   email: string;
@@ -25,6 +37,7 @@ export type MemoryCategory =
 
 export interface MemoryItem {
   id: string;
+  userId?: string;
   customerId: string;
   conversationId?: string;
   content: string;
@@ -63,6 +76,7 @@ export interface Message {
 
 export interface Conversation {
   id: string;
+  userId?: string;
   customerId: string;
   title: string;
   createdAt: string;
@@ -72,6 +86,7 @@ export interface Conversation {
 
 export interface UnresolvedIssue {
   id: string;
+  userId?: string;
   customerId: string;
   title: string;
   description: string;
@@ -84,6 +99,7 @@ export interface UnresolvedIssue {
 
 export interface TimelineEvent {
   id: string;
+  userId?: string;
   customerId: string;
   type: 
     | 'customer_created'

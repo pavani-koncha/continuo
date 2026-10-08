@@ -1,6 +1,6 @@
 import React from 'react';
-import { Sparkles, MessageSquare, Brain, HelpCircle, ChevronDown, CheckCircle2 } from 'lucide-react';
-import { Customer } from '../types';
+import { Sparkles, MessageSquare, Brain, HelpCircle, ChevronDown, CheckCircle2, LogOut, User as UserIcon } from 'lucide-react';
+import { Customer, User } from '../types';
 
 interface NavbarProps {
   currentTab: string;
@@ -10,6 +10,8 @@ interface NavbarProps {
   onOpenAskContinuo: () => void;
   onOpenAddCustomer: () => void;
   statusInfo: any;
+  currentUser?: User | null;
+  onSignOut?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -19,7 +21,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectCustomer,
   onOpenAskContinuo,
   onOpenAddCustomer,
-  statusInfo
+  statusInfo,
+  currentUser,
+  onSignOut
 }) => {
   const getTabTitle = () => {
     switch (currentTab) {
@@ -82,8 +86,28 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>Ask Continuo</span>
         </button>
 
+        {/* User Profile Pill in Navbar */}
+        {currentUser && (
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-200 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span className="hidden sm:inline font-bold truncate max-w-[120px]">{currentUser.name}</span>
+              <span className="text-slate-400 text-[10px] hidden md:inline truncate max-w-[140px]">({currentUser.email})</span>
+            </div>
+            {onSignOut && (
+              <button
+                onClick={onSignOut}
+                className="p-1.5 rounded-xl bg-slate-900 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* System Health Indicators */}
-        <div className="hidden md:flex items-center gap-2 pl-2 border-l border-slate-800">
+        <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-800">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] text-slate-400 font-mono">
             <span className={`w-1.5 h-1.5 rounded-full ${statusInfo?.groq?.configured ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
             <span>Groq</span>

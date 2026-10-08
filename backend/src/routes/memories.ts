@@ -1,16 +1,19 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { storageService } from '../services/storageService.js';
 import { hindsightService } from '../services/hindsightService.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET memories (optionally filtered by customerId and category)
-router.get('/', (req: Request, res: Response) => {
+router.use(requireAuth);
+
+// GET memories (optionally filtered by customerId and category, strictly for authenticated user)
+router.get('/', (req: AuthenticatedRequest, res: Response) => {
   try {
     const customerId = req.query.customerId as string | undefined;
     const category = req.query.category as string | undefined;
 
-    let memories = storageService.getMemories(customerId);
+    let memories = storageService.getMemories(customerId, req.user?.id);
 
     if (category && category !== 'All') {
       memories = memories.filter(m => m.category.toLowerCase() === category.toLowerCase());
@@ -22,15 +25,21 @@ router.get('/', (req: Request, res: Response) => {
   }
 });
 
-// Manual memory creation
-router.post('/', async (req: Request, res: Response) => {
+// Manual memory creation for authenticated user
+router.post('/', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { customerId, content, category, source } = req.body;
     if (!customerId || !content || !category) {
       return res.status(400).json({ error: 'customerId, content, and category are required' });
     }
 
+    const customer = storageService.getCustomer(customerId, req.user?.id);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
     const memory = await hindsightService.storeMemory({
+      userId: req.user?.id,
       customerId,
       content,
       category,

@@ -1,16 +1,20 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { storageService } from '../services/storageService.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /api/stats (Dashboard overview)
-router.get('/', (req: Request, res: Response) => {
+router.use(requireAuth);
+
+// GET /api/stats (Dashboard overview for authenticated user)
+router.get('/', (req: AuthenticatedRequest, res: Response) => {
   try {
-    const customers = storageService.getCustomers();
-    const conversations = storageService.getConversations();
-    const memories = storageService.getMemories();
-    const issues = storageService.getIssues();
-    const timeline = storageService.getTimeline();
+    const userId = req.user?.id;
+    const customers = storageService.getCustomers(userId);
+    const conversations = storageService.getConversations(undefined, userId);
+    const memories = storageService.getMemories(undefined, userId);
+    const issues = storageService.getIssues(undefined, userId);
+    const timeline = storageService.getTimeline(undefined, userId);
 
     const openIssues = issues.filter(i => i.status === 'open');
     const needingAttention = customers.filter(c => c.health === 'Needs Attention' || c.health === 'At Risk');
@@ -48,13 +52,14 @@ router.get('/', (req: Request, res: Response) => {
   }
 });
 
-// GET /api/stats/insights (Deep Insights aggregation)
-router.get('/insights', (req: Request, res: Response) => {
+// GET /api/stats/insights (Deep Insights aggregation for authenticated user)
+router.get('/insights', (req: AuthenticatedRequest, res: Response) => {
   try {
-    const customers = storageService.getCustomers();
-    const memories = storageService.getMemories();
-    const issues = storageService.getIssues();
-    const conversations = storageService.getConversations();
+    const userId = req.user?.id;
+    const customers = storageService.getCustomers(userId);
+    const memories = storageService.getMemories(undefined, userId);
+    const issues = storageService.getIssues(undefined, userId);
+    const conversations = storageService.getConversations(undefined, userId);
 
     const openIssues = issues.filter(i => i.status === 'open');
     const resolvedIssues = issues.filter(i => i.status === 'resolved');

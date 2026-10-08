@@ -1,11 +1,14 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { storageService } from '../services/storageService.js';
 import { groqService } from '../services/groqService.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// POST /api/ask
-router.post('/', async (req: Request, res: Response) => {
+router.use(requireAuth);
+
+// POST /api/ask (strictly scoped to customer and authenticated user)
+router.post('/', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { customerId, question } = req.body;
 
@@ -13,13 +16,13 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'customerId and question are required' });
     }
 
-    const customer = storageService.getCustomer(customerId);
+    const customer = storageService.getCustomer(customerId, req.user?.id);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
 
-    const memories = storageService.getMemories(customerId);
-    const issues = storageService.getIssues(customerId);
+    const memories = storageService.getMemories(customerId, req.user?.id);
+    const issues = storageService.getIssues(customerId, req.user?.id);
 
     const result = await groqService.askContinuo(
       customer,

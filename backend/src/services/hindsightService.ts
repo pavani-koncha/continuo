@@ -2,6 +2,7 @@ import { MemoryItem, RecalledMemory } from '../types.js';
 import { storageService } from './storageService.js';
 
 export interface StoreMemoryParams {
+  userId?: string;
   customerId: string;
   conversationId?: string;
   content: string;
@@ -28,6 +29,7 @@ export class HindsightService {
   async storeMemory(params: StoreMemoryParams): Promise<MemoryItem> {
     const memoryItem: MemoryItem = {
       id: crypto.randomUUID(),
+      userId: params.userId,
       customerId: params.customerId,
       conversationId: params.conversationId,
       content: params.content,
@@ -47,16 +49,19 @@ export class HindsightService {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${this.apiKey}`,
-            'X-Customer-ID': params.customerId
+            'X-Customer-ID': params.customerId,
+            ...(params.userId ? { 'X-User-ID': params.userId } : {})
           },
           body: JSON.stringify({
             customer_id: params.customerId,
+            user_id: params.userId,
             content: params.content,
             category: params.category,
             metadata: {
               source: params.source,
               timestamp: memoryItem.timestamp,
-              conversation_id: params.conversationId
+              conversation_id: params.conversationId,
+              user_id: params.userId
             }
           })
         });
@@ -80,7 +85,7 @@ export class HindsightService {
    * Retrieves relevant memories for a specific customer.
    * Guarantees 100% customer isolation.
    */
-  async retrieveMemories(customerId: string, query: string, topK: number = 4): Promise<RecalledMemory[]> {
+  async retrieveMemories(customerId: string, query: string, topK: number = 4, userId?: string): Promise<RecalledMemory[]> {
     // 1. Try remote Hindsight retrieval if key is present
     if (this.isConfigured()) {
       try {
@@ -89,10 +94,12 @@ export class HindsightService {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${this.apiKey}`,
-            'X-Customer-ID': customerId
+            'X-Customer-ID': customerId,
+            ...(userId ? { 'X-User-ID': userId } : {})
           },
           body: JSON.stringify({
             customer_id: customerId,
+            user_id: userId,
             query: query,
             limit: topK
           })
@@ -117,7 +124,7 @@ export class HindsightService {
     }
 
     // 2. Fallback: Intelligent semantic & keyword matching on customer-isolated persistent memories
-    const customerMemories = storageService.getMemories(customerId);
+    const customerMemories = storageService.getMemories(customerId, userId);
     if (!customerMemories.length) {
       return [];
     }

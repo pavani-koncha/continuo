@@ -8,9 +8,11 @@ import {
   Settings, 
   Plus, 
   Sparkles,
-  Bot
+  Bot,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
-import { Customer } from '../types';
+import { Customer, User } from '../types';
 
 interface SidebarProps {
   currentTab: string;
@@ -19,6 +21,8 @@ interface SidebarProps {
   customers: Customer[];
   selectedCustomer: Customer | null;
   onSelectCustomer: (cust: Customer) => void;
+  currentUser?: User | null;
+  onSignOut?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -27,7 +31,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenAddCustomer,
   customers,
   selectedCustomer,
-  onSelectCustomer
+  onSelectCustomer,
+  currentUser,
+  onSignOut
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -37,6 +43,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'insights', label: 'Insights', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
+  const getInitials = (name?: string, email?: string) => {
+    if (name) {
+      const parts = name.trim().split(' ');
+      if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+      return name.slice(0, 2).toUpperCase();
+    }
+    if (email) return email.slice(0, 2).toUpperCase();
+    return 'CO';
+  };
 
   return (
     <aside className="w-64 bg-[#0c1220] border-r border-slate-800/80 flex flex-col justify-between shrink-0 h-screen sticky top-0">
@@ -106,34 +122,62 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
       </div>
 
-      {/* Active Customer Context Widget */}
-      <div className="p-3 border-t border-slate-800/80 bg-slate-900/40">
-        <div className="text-[10px] uppercase font-bold text-slate-400 px-2 mb-2 flex items-center justify-between">
-          <span>Active Context</span>
-          <span className="text-emerald-400 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            Isolated
-          </span>
-        </div>
-        {selectedCustomer ? (
-          <div className="p-2.5 rounded-xl bg-slate-850/90 border border-slate-800 flex items-center justify-between">
-            <div className="truncate pr-2">
-              <p className="text-xs font-semibold text-white truncate">{selectedCustomer.name}</p>
-              <p className="text-[11px] text-slate-400 truncate">{selectedCustomer.company}</p>
-            </div>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
-              selectedCustomer.health === 'Healthy'
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : selectedCustomer.health === 'Needs Attention'
-                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-            }`}>
-              {selectedCustomer.health}
+      {/* Bottom Section: Active Customer Context & Logged-in User Profile */}
+      <div className="border-t border-slate-800/80 bg-slate-900/40 space-y-2 p-3">
+        {/* Active Customer Context Widget */}
+        <div>
+          <div className="text-[10px] uppercase font-bold text-slate-400 px-2 mb-1.5 flex items-center justify-between">
+            <span>Customer Context</span>
+            <span className="text-emerald-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Isolated
             </span>
           </div>
-        ) : (
-          <div className="p-2.5 rounded-xl bg-slate-850/60 border border-slate-800/80 text-center">
-            <p className="text-[11px] text-slate-400">No customer selected</p>
+          {selectedCustomer ? (
+            <div className="p-2.5 rounded-xl bg-slate-850/90 border border-slate-800 flex items-center justify-between">
+              <div className="truncate pr-2">
+                <p className="text-xs font-semibold text-white truncate">{selectedCustomer.name}</p>
+                <p className="text-[11px] text-slate-400 truncate">{selectedCustomer.company}</p>
+              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                selectedCustomer.health === 'Healthy'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                  : selectedCustomer.health === 'Needs Attention'
+                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+              }`}>
+                {selectedCustomer.health}
+              </span>
+            </div>
+          ) : (
+            <div className="p-2 rounded-xl bg-slate-850/60 border border-slate-800/80 text-center">
+              <p className="text-[11px] text-slate-400">No customer selected</p>
+            </div>
+          )}
+        </div>
+
+        {/* Logged In User Profile Widget */}
+        {currentUser && (
+          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-sm">
+                {getInitials(currentUser.name, currentUser.email)}
+              </div>
+              <div className="truncate">
+                <p className="text-xs font-bold text-white truncate">{currentUser.name}</p>
+                <p className="text-[10px] text-slate-400 truncate font-mono">{currentUser.email}</p>
+              </div>
+            </div>
+
+            {onSignOut && (
+              <button
+                onClick={onSignOut}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
+                title="Sign Out of Continuo"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
         )}
       </div>

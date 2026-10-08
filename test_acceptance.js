@@ -1,10 +1,29 @@
 async function runAcceptanceTest() {
   const base = 'http://localhost:5000/api';
 
-  console.log('1. Testing Create Customer A (Alex Morgan)...');
-  const custARes = await fetch(base + '/customers', {
+  console.log('0. Authenticating Support Agent Session...');
+  const authEmail = `demo_agent_${Date.now()}@continuo.ai`;
+  const signupRes = await fetch(base + '/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Agent Morgan',
+      email: authEmail,
+      password: 'password123'
+    })
+  });
+  const authData = await signupRes.json();
+  const token = authData.token;
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  };
+  console.log('✓ Agent Authenticated:', authData.user.name, `(${authData.user.email})`);
+
+  console.log('\n1. Testing Create Customer A (Alex Morgan)...');
+  const custARes = await fetch(base + '/customers', {
+    method: 'POST',
+    headers: authHeaders,
     body: JSON.stringify({
       name: 'Alex Morgan',
       company: 'NovaTech',
@@ -20,7 +39,7 @@ async function runAcceptanceTest() {
   console.log('\n2. Starting Conversation Thread 1 for Customer A...');
   const conv1Res = await fetch(base + '/conversations', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders,
     body: JSON.stringify({ customerId: custA.id, title: 'Contract & Security Discussion' })
   });
   const conv1 = await conv1Res.json();
@@ -29,7 +48,7 @@ async function runAcceptanceTest() {
   console.log('\n3. Sending message in Thread 1: "We need a security review before signing the contract."');
   const msg1Res = await fetch(base + '/conversations/' + conv1.id + '/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders,
     body: JSON.stringify({ text: 'We need a security review before signing the contract.' })
   });
   const msg1Data = await msg1Res.json();
@@ -38,7 +57,9 @@ async function runAcceptanceTest() {
   console.log('✓ Recommended Next Action:', msg1Data.recommendedNextAction);
 
   console.log('\n4. Verifying Memory Explorer contains the retained memory...');
-  const memsRes = await fetch(base + '/memories?customerId=' + custA.id);
+  const memsRes = await fetch(base + '/memories?customerId=' + custA.id, {
+    headers: authHeaders
+  });
   const mems = await memsRes.json();
   console.log('✓ Stored Memories Count for Customer A:', mems.length);
   console.log('✓ Memory Sample:', mems[0].content, '| Category:', mems[0].category);
@@ -46,7 +67,7 @@ async function runAcceptanceTest() {
   console.log('\n5. Starting a COMPLETELY NEW CONVERSATION Thread 2...');
   const conv2Res = await fetch(base + '/conversations', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders,
     body: JSON.stringify({ customerId: custA.id, title: 'Contract Execution Follow-up' })
   });
   const conv2 = await conv2Res.json();
@@ -55,7 +76,7 @@ async function runAcceptanceTest() {
   console.log('\n6. Sending query in Thread 2: "Can we sign the contract today?"');
   const msg2Res = await fetch(base + '/conversations/' + conv2.id + '/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders,
     body: JSON.stringify({ text: 'Can we sign the contract today?' })
   });
   const msg2Data = await msg2Res.json();
@@ -66,7 +87,7 @@ async function runAcceptanceTest() {
   console.log('\n7. Creating Customer B (Sarah Jenkins / CloudScale)...');
   const custBRes = await fetch(base + '/customers', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders,
     body: JSON.stringify({
       name: 'Sarah Jenkins',
       company: 'CloudScale',
@@ -80,7 +101,9 @@ async function runAcceptanceTest() {
   console.log('✓ Customer B Created:', custB.id, custB.name);
 
   console.log('\n8. Verifying Customer Isolation (Customer B memories should be empty)...');
-  const custBMemsRes = await fetch(base + '/memories?customerId=' + custB.id);
+  const custBMemsRes = await fetch(base + '/memories?customerId=' + custB.id, {
+    headers: authHeaders
+  });
   const custBMems = await custBMemsRes.json();
   console.log('✓ Customer B Stored Memories Count:', custBMems.length);
   if (custBMems.length === 0) {
@@ -92,7 +115,7 @@ async function runAcceptanceTest() {
   console.log('\n9. Testing "Ask Continuo": "What is blocking this customer from signing?" for Customer A...');
   const askRes = await fetch(base + '/ask', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders,
     body: JSON.stringify({
       customerId: custA.id,
       question: 'What is blocking this customer from signing?'
