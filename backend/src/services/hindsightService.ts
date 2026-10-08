@@ -172,9 +172,41 @@ export class HindsightService {
     // Require genuine keyword overlap (score >= 2)
     const topMatches = scored.filter(s => s.score >= 2).slice(0, topK);
     
-    // If no strong match was found (e.g. general question unrelated to customer history),
-    // return empty array so unrelated customer memories are NOT forced into the response.
+    // If no strong keyword match was found, check if this is an explicit customer history inquiry
     if (topMatches.length === 0) {
+      const lowerQuery = query.toLowerCase();
+      const isHistoryMetaQuery = (
+        lowerQuery.includes('previously') ||
+        lowerQuery.includes('told us') ||
+        lowerQuery.includes('tell us') ||
+        lowerQuery.includes('said earlier') ||
+        lowerQuery.includes('said before') ||
+        lowerQuery.includes('discussed earlier') ||
+        lowerQuery.includes('past discussion') ||
+        lowerQuery.includes('previous discussion') ||
+        lowerQuery.includes('previous conversation') ||
+        lowerQuery.includes('what did they say') ||
+        lowerQuery.includes('customer history') ||
+        lowerQuery.includes('account history') ||
+        lowerQuery.includes('customer notes')
+      );
+
+      if (isHistoryMetaQuery && customerMemories.length > 0) {
+        const sortedRecent = [...customerMemories].sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        ).slice(0, topK);
+
+        return sortedRecent.map(m => ({
+          id: m.id,
+          content: m.content,
+          category: m.category,
+          source: m.source,
+          timestamp: m.timestamp,
+          relevanceReason: `Customer account memory history`
+        }));
+      }
+
+      // Return empty array so unrelated customer memories are NOT forced into general questions
       return [];
     }
 
