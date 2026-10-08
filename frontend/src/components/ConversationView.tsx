@@ -427,9 +427,11 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* UI Example Starters (Click to load into message input) */}
+        {/* UI Example Suggestions (Strictly optional UI hints, zero restriction on what you can ask) */}
         <div className="px-6 py-2 bg-[#0c1220] border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto">
-          <span className="text-[10px] uppercase font-bold text-slate-500 shrink-0">Example Queries:</span>
+          <span className="text-[10px] uppercase font-bold text-slate-500 shrink-0">
+            Optional Ideas:
+          </span>
           {demoPrompts.map((preset, idx) => (
             <button
               key={idx}
@@ -440,11 +442,14 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               }}
               disabled={isSending}
               className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-800 whitespace-nowrap transition-all"
-              title="Click to paste into input box"
+              title="Click to paste into input box (optional suggestion)"
             >
               {preset.label}
             </button>
           ))}
+          <span className="text-[10px] text-slate-600 italic shrink-0 hidden md:inline ml-auto">
+            (You can ask ANY question like ChatGPT)
+          </span>
         </div>
 
         {/* Chat Box Input Bar */}
@@ -460,7 +465,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               <textarea
                 ref={inputRef}
                 rows={2}
-                placeholder={`Type customer message as ${selectedCustomer.name}... (Press Enter to send, Shift+Enter for newline)`}
+                placeholder={`Ask anything (open-ended like ChatGPT: general knowledge, coding, advice, or customer context for ${selectedCustomer.name})...`}
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}

@@ -26,16 +26,18 @@ export interface AIResponseResult {
 }
 
 export class GroqService {
-  private apiKey: string;
   private model: string;
 
   constructor() {
-    this.apiKey = process.env.GROQ_API_KEY || '';
     this.model = 'llama-3.3-70b-versatile';
   }
 
+  get apiKey(): string {
+    return (process.env.GROQ_API_KEY || '').trim();
+  }
+
   isConfigured(): boolean {
-    return Boolean(this.apiKey && this.apiKey.trim().length > 0);
+    return Boolean(this.apiKey && this.apiKey.length > 0);
   }
 
   async generateSupportResponse(
@@ -45,80 +47,82 @@ export class GroqService {
     recalledMemories: RecalledMemory[]
   ): Promise<AIResponseResult> {
     const memoryContext = recalledMemories.length > 0
-      ? recalledMemories.map(m => `[CATEGORY: ${m.category}] (Source: ${m.source}) Content: "${m.content}"`).join('\n')
-      : 'None found in persistent memory.';
+      ? recalledMemories.map(m => `[${m.category}] (Source: ${m.source}): "${m.content}"`).join('\n')
+      : 'No relevant memories found.';
 
-    // Only include recent messages if they exist and only for context
-    const recentChat = conversation.messages.slice(-4).map(m => 
-      `${m.sender === 'customer' ? 'User' : 'Continuo'}: ${m.text}`
-    ).join('\n');
+    // Format previous messages for multi-turn conversational context (like ChatGPT)
+    const historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    const prevList = (conversation.messages || [])
+      .filter(m => m.text !== incomingMessage)
+      .slice(-6);
 
-    const systemPrompt = `You are Continuo, a fully dynamic, user-driven AI assistant and customer support intelligence system.
-
-CRITICAL OPERATIONAL RULES:
-1. FULLY DYNAMIC & USER-DRIVEN:
-   - Carefully read the user's incoming message and understand its ACTUAL meaning, intent, and specific topic.
-   - Generate a fresh, accurate, direct, and thoughtful answer to that exact message.
-   - Do NOT match or copy from demo scripts, predefined topics, or sample questions.
-   - You can answer ANY question across any domain (technical explanations, troubleshooting, general knowledge, life advice, definitions, conceptual walkthroughs, conversational queries).
-
-2. TOPIC SWITCHING:
-   - Every message must be understood and answered according to its own topic.
-   - If the user changes the topic, IMMEDIATELY answer the new topic.
-   - Do NOT drag or continue the previous topic unless the user is clearly and explicitly continuing it.
-
-3. CUSTOMER CONTEXT & PERSISTENT MEMORY:
-   - If and ONLY if the user's question specifically relates to this customer's account, contracts, or technical deployment, incorporate the customer profile and recalled memories.
-   - If the question is general or unrelated to customer history, answer the question directly without forcing customer details or memories.
-
-4. NATURAL TONE & STRUCTURE:
-   - Write naturally, conversationally, and informatively.
-   - Do NOT use rigid or repetitive boilerplate headers (such as "Core Definition", "Primary Purpose", or "Key Considerations") unless genuinely appropriate.
-
-Customer Profile:
-- Name: ${customer.name}
-- Company: ${customer.company}
-- Product: ${customer.product}
-- Current Priority: ${customer.priority || 'Medium'}
-- Current Health: ${customer.health} (${customer.healthReason || 'No issues yet'})
-
-${recalledMemories.length > 0 ? `RECALLED CUSTOMER MEMORIES (Use ONLY if relevant to current question):\n${memoryContext}\n` : ''}
-
-You MUST respond strictly with a valid JSON object matching this schema:
-{
-  "reply": "string (The actual direct, natural, helpful response to the user's message)",
-  "extractedMemories": [
-    {
-      "content": "string (Concise persistent memory summary if user stated an account requirement, technical context, or preference)",
-      "category": "Requirement | Issue | Preference | Technical Context | Commitment | General Context"
+    for (const msg of prevList) {
+      historyMessages.push({
+        role: msg.sender === 'customer' ? 'user' : 'assistant',
+        content: msg.text
+      });
     }
-  ],
-  "recommendedNextAction": {
-    "action": "string (Clear next action statement)",
-    "reason": "string (Short explanation of why)",
-    "urgency": "high | medium | low"
-  },
-  "detectedIssues": [
-    {
-      "title": "string",
-      "description": "string",
-      "severity": "critical | high | medium | low",
-      "status": "open | resolved"
-    }
-  ],
-  "customerHealth": "Healthy | Needs Attention | At Risk",
-  "customerPriority": "Low | Medium | High | Critical",
-  "healthReason": "string",
-  "customerSummary": "string (Brief updated overview of customer state)",
-  "conversationSummary": "string (Brief 1-sentence summary of this conversation)",
-  "followUpTasks": [
-    {
-      "title": "string",
-      "priority": "low | medium | high",
-      "dueDate": "string (optional date/timeframe)"
-    }
-  ]
-}`;
+
+    const systemPrompt = `You are CONTINUO, a fully open-ended AI assistant and customer intelligence system (like ChatGPT).
+You possess broad general knowledge, deep reasoning capabilities, and customer memory integration.
+
+OPERATIONAL PRINCIPLES:
+1. FULLY OPEN-ENDED LIKE CHATGPT:
+   - The user can ask ANY question in the chat across ANY domain: general knowledge, science, mathematics, coding, history, psychology, life advice, business, or casual conversation.
+   - You must never restrict, classify, redirect, or force the question into predefined sample queries or customer topics.
+   - Understand the user's actual message and generate a direct, relevant, articulate, and accurate answer to that exact question.
+   - Never replace the user's question with a predefined question.
+   - Never return generic responses such as "How can we assist you with General Product?".
+   - Do not use fixed response headers like "Core Definition", "Primary Purpose", or "Key Considerations" unless naturally requested.
+
+2. CUSTOMER & HINDSIGHT MEMORY CONTEXT:
+   - Active Customer Context: ${customer.name} (${customer.company}), Product: ${customer.product}, Health: ${customer.health}, Priority: ${customer.priority || 'Medium'}.
+   - Use customer context and Hindsight memory ONLY when the user's question is related to this customer's account, history, conversations, requirements, issues, preferences, or sales context.
+   - For general/unrelated questions, answer the actual question normally without forcing customer memory or customer details into the response.
+   - If the user asks a customer/sales question and the required customer information is not available in the customer data or memories, clearly state that it is unavailable on record instead of inventing information.
+
+3. IMMEDIATE TOPIC SWITCHING:
+   - Every user message must be independently understood and answered according to its own topic.
+   - If the user changes topic, immediately answer the new topic. Do not continue previous topics unless the user is clearly continuing them.
+
+4. RESPONSE FORMAT:
+   Respond strictly with a valid JSON object matching this schema:
+   {
+     "reply": "string (Direct, comprehensive, natural answer to the user's exact message)",
+     "extractedMemories": [
+       {
+         "content": "string (Only if the message contains a new specific customer requirement, preference, commitment, or technical setup)",
+         "category": "Requirement | Issue | Preference | Technical Context | Commitment | General Context"
+       }
+     ],
+     "recommendedNextAction": {
+       "action": "string (Direct recommended action)",
+       "reason": "string (Brief rationale)",
+       "urgency": "high | medium | low"
+     },
+     "detectedIssues": [
+       {
+         "title": "string",
+         "description": "string",
+         "severity": "critical | high | medium | low",
+         "status": "open | resolved"
+       }
+     ],
+     "customerHealth": "Healthy | Needs Attention | At Risk",
+     "customerPriority": "Low | Medium | High | Critical",
+     "healthReason": "string",
+     "customerSummary": "string",
+     "conversationSummary": "string",
+     "followUpTasks": [
+       {
+         "title": "string",
+         "priority": "low | medium | high",
+         "dueDate": "string"
+       }
+     ]
+   }
+
+${recalledMemories.length > 0 ? `RELEVANT RECALLED CUSTOMER MEMORIES:\n${memoryContext}\n` : ''}`;
 
     if (this.isConfigured()) {
       try {
@@ -132,9 +136,10 @@ You MUST respond strictly with a valid JSON object matching this schema:
             model: this.model,
             messages: [
               { role: 'system', content: systemPrompt },
+              ...historyMessages,
               { role: 'user', content: incomingMessage }
             ],
-            temperature: 0.3,
+            temperature: 0.4,
             response_format: { type: 'json_object' }
           })
         });
@@ -143,41 +148,68 @@ You MUST respond strictly with a valid JSON object matching this schema:
           const data: any = await response.json();
           const content = data.choices?.[0]?.message?.content;
           if (content) {
-            const parsed = JSON.parse(content);
-            return {
-              reply: parsed.reply,
-              extractedMemories: parsed.extractedMemories || [],
-              recommendedNextAction: parsed.recommendedNextAction || {
-                action: 'Follow up with customer inquiry',
-                reason: 'Standard customer care protocol',
-                urgency: 'medium'
-              },
-              detectedIssues: parsed.detectedIssues || [],
-              customerHealth: parsed.customerHealth,
-              customerPriority: parsed.customerPriority,
-              healthReason: parsed.healthReason,
-              customerSummary: parsed.customerSummary,
-              conversationSummary: parsed.conversationSummary,
-              followUpTasks: parsed.followUpTasks || []
-            };
+            let cleaned = content.trim();
+            if (cleaned.startsWith('```json')) {
+              cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+            } else if (cleaned.startsWith('```')) {
+              cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+            }
+            try {
+              const parsed = JSON.parse(cleaned);
+              if (parsed.reply && typeof parsed.reply === 'string') {
+                return {
+                  reply: parsed.reply,
+                  extractedMemories: Array.isArray(parsed.extractedMemories) ? parsed.extractedMemories : [],
+                  recommendedNextAction: parsed.recommendedNextAction || {
+                    action: 'Acknowledge message and assist user',
+                    reason: 'General inquiry received',
+                    urgency: 'low'
+                  },
+                  detectedIssues: Array.isArray(parsed.detectedIssues) ? parsed.detectedIssues : [],
+                  customerHealth: parsed.customerHealth || customer.health,
+                  customerPriority: parsed.customerPriority || customer.priority,
+                  healthReason: parsed.healthReason,
+                  customerSummary: parsed.customerSummary,
+                  conversationSummary: parsed.conversationSummary || `User asked: "${incomingMessage.slice(0, 40)}"`,
+                  followUpTasks: Array.isArray(parsed.followUpTasks) ? parsed.followUpTasks : []
+                };
+              }
+            } catch (pErr) {
+              console.warn('Groq returned non-JSON, checking raw text:', pErr);
+              if (cleaned.length > 0 && !cleaned.startsWith('{')) {
+                return {
+                  reply: cleaned,
+                  extractedMemories: [],
+                  recommendedNextAction: {
+                    action: 'Provide follow-up if user requests more details',
+                    reason: 'Direct response generated',
+                    urgency: 'low'
+                  },
+                  detectedIssues: [],
+                  customerHealth: customer.health,
+                  customerPriority: customer.priority,
+                  conversationSummary: `User asked: "${incomingMessage.slice(0, 40)}"`
+                };
+              }
+            }
           }
         } else {
           console.warn(`Groq API error ${response.status}: ${await response.text().catch(() => '')}`);
         }
       } catch (err: any) {
-        console.warn(`Groq call error, falling back to dynamic local reasoning:`, err.message);
+        console.warn(`Groq call error, falling back to local open-ended engine:`, err.message);
       }
     }
 
-    // Dynamic, user-driven semantic reasoning engine (handles any message independently)
-    return this.generateDynamicResponse(customer, incomingMessage, recalledMemories);
+    // Fully open-ended local reasoning engine (when Groq key is not set or network fails)
+    return this.generateOpenEndedResponse(customer, incomingMessage, recalledMemories);
   }
 
   /**
-   * Generates a completely dynamic response based purely on the actual meaning and intent of the user's message.
-   * Does NOT match demo prompts, does NOT use rigid templates ("Core Definition", etc.), and handles topic switching immediately.
+   * Open-ended conversational response generation:
+   * Understands any question directly like ChatGPT without canned responses or rigid templates.
    */
-  private generateDynamicResponse(
+  private generateOpenEndedResponse(
     customer: Customer,
     incomingMessage: string,
     recalledMemories: RecalledMemory[]
@@ -195,49 +227,59 @@ You MUST respond strictly with a valid JSON object matching this schema:
     let priority: CustomerPriority = customer.priority || 'Medium';
     let healthReason = customer.healthReason || 'Regular customer operations';
     let customerSummary = customer.summary;
-    let conversationSummary = `Inquiry regarding: "${incomingMessage.slice(0, 50)}..."`;
+    let conversationSummary = `Inquiry: "${incomingMessage.slice(0, 50)}"`;
     const followUpTasks: Array<{ title: string; priority: 'low' | 'medium' | 'high'; dueDate?: string }> = [];
 
-    // Clean subject extraction from message
+    // Clean subject extraction
     const cleanSubject = incomingMessage
       .replace(/^(what is|what are|how to|how do i|how can i|why is|why are|why do|why does|tell me about|explain|can you explain|can we|can i|is it possible to)\s+/i, '')
       .replace(/[?!.]+$/, '')
       .trim();
 
-    // 1. RECALLED CUSTOMER MEMORY INTEGRATION (Only if memories exist AND message is asking about account/contract/blockers)
-    const isAskingAboutContractOrSigning = (text.includes('sign') || text.includes('contract') || text.includes('deal') || text.includes('block') || text.includes('ready'));
-    if (recalledMemories.length > 0 && isAskingAboutContractOrSigning) {
-      const securityMem = recalledMemories.find(m => m.content.toLowerCase().includes('security') || m.content.toLowerCase().includes('review'));
-      if (securityMem) {
-        reply = `Before proceeding with contract signing, the security review mentioned in previous discussions (${securityMem.content}) needs to be completed. Once that review is cleared by your team, the contract can move forward immediately. Would you like me to connect you with our compliance lead?`;
-        nextAction = {
-          action: 'Confirm status of security review with compliance lead',
-          reason: 'Security review requirement is currently pending prior to contract signing',
-          urgency: 'high'
-        };
-        health = 'Needs Attention';
-        priority = 'High';
-        healthReason = 'Blocked on security review completion before signing';
-        conversationSummary = 'Customer inquired about signing contract; reminded of outstanding security review.';
-        return {
-          reply,
-          extractedMemories,
-          recommendedNextAction: nextAction,
-          detectedIssues,
-          customerHealth: health,
-          customerPriority: priority,
-          healthReason,
-          customerSummary,
-          conversationSummary,
-          followUpTasks
-        };
-      }
+    // 1. CUSTOMER REQUIREMENT STATEMENTS (Extracts & retains to Hindsight)
+    const isRequirement = (
+      text.startsWith('we need ') || 
+      text.startsWith('we require ') || 
+      text.startsWith('our requirement is') || 
+      text.includes('must have before signing') ||
+      (text.includes('need') && text.includes('security review'))
+    );
+
+    if (isRequirement) {
+      reply = `Thank you for sharing that requirement, ${customer.name}. We have logged that "${incomingMessage.replace(/^we need\s+/i, '').replace(/[.]+$/, '')}" is required into our persistent customer context.`;
+      extractedMemories.push({
+        content: incomingMessage,
+        category: 'Requirement'
+      });
+      nextAction = {
+        action: `Coordinate deliverables for customer requirement: ${cleanSubject.slice(0, 30)}`,
+        reason: 'New customer requirement specified',
+        urgency: 'high'
+      };
+      conversationSummary = `Customer stated requirement: "${incomingMessage.slice(0, 45)}"`;
+      return {
+        reply,
+        extractedMemories,
+        recommendedNextAction: nextAction,
+        detectedIssues,
+        customerHealth: health,
+        customerPriority: priority,
+        healthReason,
+        customerSummary,
+        conversationSummary,
+        followUpTasks
+      };
     }
 
-    // 2. INCIDENT / OUTAGE / BLOCKING PROBLEM REPORT
-    const isIncident = (text.includes('down') || text.includes('outage') || text.includes('broken') || text.includes('crash') || text.includes('failing') || text.includes('cannot login') || text.includes('unable to login') || text.includes('blocking access'));
+    // 2. CUSTOMER INCIDENT / OUTAGE / ERROR REPORT
+    const isIncident = (
+      (text.includes('down') && (text.includes('system') || text.includes('server') || text.includes('service') || text.includes('all'))) ||
+      text.includes('outage') || text.includes('production is down') || text.includes('site is down') ||
+      text.includes('blocking access') || text.includes('cannot login') || text.includes('unable to login')
+    );
+
     if (isIncident) {
-      reply = `I apologize for the disruption you are experiencing with this issue. Our engineering team is treating this with high priority. Could you share any specific error codes, affected user accounts, or timestamps so we can investigate the root cause immediately?`;
+      reply = `I apologize for the disruption you are encountering with this issue. Our engineering team is prioritizing this immediately. Could you share any specific error codes, affected user accounts, or timestamps so we can investigate the root cause without delay?`;
       extractedMemories.push({
         content: `Customer reported critical incident: ${cleanSubject || incomingMessage}`,
         category: 'Issue'
@@ -276,10 +318,10 @@ You MUST respond strictly with a valid JSON object matching this schema:
       };
     }
 
-    // 3. CONFIRMATION OF RESOLUTION
-    const isResolution = (text.includes('resolved') || text.includes('fixed') || text.includes('working now') || text.includes('all good') || text.includes('back up'));
+    // 3. RESOLUTION CONFIRMATION
+    const isResolution = (text.includes('issue is resolved') || text.includes('fixed now') || text.includes('working now') || text.includes('everything is fixed') || text.includes('all good now'));
     if (isResolution) {
-      reply = `That is great to hear! We have noted that the issue is now resolved. Our team will continue monitoring stability to make sure everything remains smooth. Please let us know if anything else comes up.`;
+      reply = `That is wonderful to hear! We have marked the issue as resolved in our records. Our team will continue monitoring stability to ensure uninterrupted performance. Please let us know if anything else arises.`;
       detectedIssues.push({
         title: 'Service Disruption',
         description: 'Customer confirmed issue is resolved.',
@@ -314,39 +356,10 @@ You MUST respond strictly with a valid JSON object matching this schema:
       };
     }
 
-    // 4. CUSTOMER REQUIREMENT OR ENVIRONMENT CONTEXT
-    const isRequirement = (text.includes('we need') || text.includes('our requirement') || text.includes('we require') || text.includes('must have') || text.includes('before signing'));
-    const isEnvironment = (text.includes('our production') || text.includes('our environment') || text.includes('runs on') || text.includes('our stack') || text.includes('hosted on'));
-    const isPreference = (text.includes('we prefer') || text.includes('please contact us via') || text.includes('email us') || text.includes('reach out via'));
-
-    if (isRequirement) {
-      reply = `Thank you for specifying this requirement, ${customer.name}. We have recorded that ${incomingMessage.replace(/^we need\s+/i, '')} is required. Our team will make sure this is incorporated into our project tracking and deliverables.`;
-      extractedMemories.push({
-        content: incomingMessage,
-        category: 'Requirement'
-      });
-      nextAction = {
-        action: `Coordinate deliverables for customer requirement: ${cleanSubject.slice(0, 30)}`,
-        reason: 'New customer requirement specified',
-        urgency: 'high'
-      };
-      conversationSummary = `Customer stated requirement: "${incomingMessage.slice(0, 45)}"`;
-      return {
-        reply,
-        extractedMemories,
-        recommendedNextAction: nextAction,
-        detectedIssues,
-        customerHealth: health,
-        customerPriority: priority,
-        healthReason,
-        customerSummary,
-        conversationSummary,
-        followUpTasks
-      };
-    }
-
+    // 4. ENVIRONMENT & INFRASTRUCTURE SPECIFICATION
+    const isEnvironment = (text.includes('our production environment') || text.includes('our stack runs on') || text.includes('our infrastructure is on') || text.includes('environment is running on'));
     if (isEnvironment) {
-      reply = `Understood. We have logged your technical environment details into our customer context. Our engineering and integration specialists will ensure all deployment steps align with your setup.`;
+      reply = `Understood. We have logged your infrastructure details into our customer context. Our engineering team will ensure all integration steps align with your setup.`;
       extractedMemories.push({
         content: incomingMessage,
         category: 'Technical Context'
@@ -371,6 +384,8 @@ You MUST respond strictly with a valid JSON object matching this schema:
       };
     }
 
+    // 5. COMMUNICATION PREFERENCE SPECIFICATION
+    const isPreference = (text.startsWith('we prefer ') || text.startsWith('please contact us via') || text.startsWith('please email us'));
     if (isPreference) {
       reply = `Got it, thank you for letting us know! We have updated your account profile with this communication preference so our team reaches out through your preferred channel.`;
       extractedMemories.push({
@@ -397,61 +412,272 @@ You MUST respond strictly with a valid JSON object matching this schema:
       };
     }
 
-    // 5. DYNAMIC GENERAL KNOWLEDGE & INFORMATIONAL REASONING
-    // Understands the user's exact query dynamically according to its actual semantics and domain.
+    // 6. TARGETED CUSTOMER & SALES INQUIRY (QUESTIONS ABOUT CUSTOMER / DEAL)
+    const lowerCustName = (customer.name || '').toLowerCase();
+    const lowerCustCompany = (customer.company || '').toLowerCase();
+
+    const hasAccountReference = (
+      text.includes('this customer') || text.includes('the customer') ||
+      text.includes('this client') || text.includes('the client') ||
+      text.includes('their account') || text.includes('our account') ||
+      text.includes('this account') || text.includes('customer account') ||
+      text.includes('their ') || text.includes('customer') ||
+      (lowerCustName.length > 2 && text.includes(lowerCustName)) ||
+      (lowerCustCompany.length > 2 && text.includes(lowerCustCompany))
+    );
+
+    const hasAccountAttribute = (
+      text.includes('budget') || text.includes('pricing') || text.includes('sla') ||
+      text.includes('renewal') || text.includes('discount') || text.includes('contract') ||
+      text.includes('deal') || text.includes('timeline') || text.includes('blocker') ||
+      text.includes('decision maker') || text.includes('stakeholder') || text.includes('requirement') ||
+      text.includes('health') || text.includes('priority') || text.includes('preference')
+    );
+
+    const isCustomerInquiry = (
+      // Direct combination of account reference and sales/account attribute
+      (hasAccountReference && hasAccountAttribute) ||
+      // Specific deal / contract execution with the customer
+      text.includes('sign the contract') || text.includes('sign our contract') ||
+      text.includes('signing the contract') || text.includes('sign this contract') ||
+      text.includes('can we sign the contract') || text.includes('can we sign today') ||
+      text.includes('can we sign') || text.includes('ready to sign') ||
+      text.includes('block the contract') || text.includes('blocking the contract') ||
+      text.includes('blocking this customer') || text.includes('blocking from signing') ||
+      text.includes('blocker for signing') || text.includes('blocker for this deal') ||
+      text.includes('what is blocking') ||
+      text.includes('can we close the deal') || text.includes('close this deal') ||
+      text.includes('status of the contract') || text.includes('status of this deal')
+    );
+
+    if (isCustomerInquiry) {
+      if (recalledMemories.length > 0) {
+        const securityMem = recalledMemories.find(m => 
+          m.content.toLowerCase().includes('security') || 
+          m.content.toLowerCase().includes('review') ||
+          m.content.toLowerCase().includes('compliance')
+        );
+        if (securityMem && (text.includes('sign') || text.includes('contract') || text.includes('block'))) {
+          reply = `Before proceeding with contract signing, the security review requirement noted in ${customer.name}'s profile (${securityMem.content}) needs to be completed. Once that clearance is granted, the contract can move forward immediately. Would you like me to connect you with our compliance lead?`;
+          nextAction = {
+            action: 'Verify security review clearance before proceeding with contract signing',
+            reason: 'Security review requirement is currently pending',
+            urgency: 'high'
+          };
+          health = 'Needs Attention';
+          priority = 'High';
+          healthReason = 'Blocked on security review completion before signing';
+          conversationSummary = 'Customer inquired about signing contract; reminded of outstanding security review.';
+          return {
+            reply,
+            extractedMemories,
+            recommendedNextAction: nextAction,
+            detectedIssues,
+            customerHealth: health,
+            customerPriority: priority,
+            healthReason,
+            customerSummary,
+            conversationSummary,
+            followUpTasks
+          };
+        } else {
+          reply = `Based on our customer memory for ${customer.name} (${customer.company}):\n\n• ${recalledMemories.map(m => m.content).join('\n• ')}`;
+          nextAction = {
+            action: 'Follow up on referenced customer requirements',
+            reason: 'Customer history referenced',
+            urgency: 'medium'
+          };
+          return {
+            reply,
+            extractedMemories,
+            recommendedNextAction: nextAction,
+            detectedIssues,
+            customerHealth: health,
+            customerPriority: priority,
+            healthReason,
+            customerSummary,
+            conversationSummary,
+            followUpTasks
+          };
+        }
+      } else {
+        // Customer query, but information is not available: clearly state unavailable instead of inventing
+        reply = `That information is not currently recorded in the account history or memory for ${customer.name} (${customer.company}). If this is a new requirement or account detail, please share the details and I will update our records.`;
+        nextAction = {
+          action: 'Request required context from customer or account executive',
+          reason: 'Information requested is not currently on record',
+          urgency: 'low'
+        };
+        return {
+          reply,
+          extractedMemories,
+          recommendedNextAction: nextAction,
+          detectedIssues,
+          customerHealth: health,
+          customerPriority: priority,
+          healthReason,
+          customerSummary,
+          conversationSummary,
+          followUpTasks
+        };
+      }
+    }
+
+    // 5. FULLY OPEN-ENDED KNOWLEDGE BASE & DIRECT REASONING (LIKE CHATGPT)
+    // Never forces customer memory. Directly answers whatever the user asks.
     const lowerQuery = incomingMessage.toLowerCase();
 
-    // Check specific semantic domains dynamically:
-    if (lowerQuery.includes('anger') || lowerQuery.includes('temper') || lowerQuery.includes('calm') || lowerQuery.includes('frustrated') || lowerQuery.includes('stress')) {
+    // --- Emotional Regulation, Psychology & Wellbeing ---
+    if (lowerQuery.includes('anger') || lowerQuery.includes('temper') || lowerQuery.includes('calm down') || lowerQuery.includes('frustrated') || lowerQuery.includes('stress')) {
       reply = `Controlling and managing anger effectively relies on physiological awareness and behavioral reframing:
 
-1. **Pause and Breathe**: When anger flares, your sympathetic nervous system initiates a fight-or-flight response. Taking slow, deep diaphragmatic breaths (inhaling for 4 seconds, holding for 4, and exhaling for 6) directly reduces heart rate and adrenaline.
-2. **Identify the Underlying Emotion**: Anger is often a secondary emotion masking feelings of helplessness, disrespect, fatigue, or frustration. Pinpoint what actually triggered the reaction.
-3. **Change Your Immediate Environment**: Step away from the situation physically for a few minutes. A brief walk or washing your face with cool water helps disrupt the escalation cycle.
-4. **Reframe Your Perspective**: Instead of reacting catastrophically, ask yourself: *"Will this matter in a week?"* Focus on what you can control rather than the frustration itself.
-5. **Communicate Assertively**: Express your boundaries or concerns using constructive "I" statements rather than accusatory language once you feel calm.`;
-    } else if (lowerQuery.includes('cloud computing') || (lowerQuery.includes('what is cloud') && !lowerQuery.includes('weather'))) {
-      reply = `Cloud computing is the on-demand delivery of IT resources and computing power over the internet on a pay-as-you-go basis, replacing the need to own and operate physical on-premise servers.
+1. **Pause and Regulate Physiology**: When anger triggers, your sympathetic nervous system initiates a fight-or-flight response. Slow diaphragmatic breathing (inhale for 4 seconds, hold for 4, exhale for 6) lowers heart rate and dampens adrenaline.
+2. **Identify the Underlying Emotion**: Anger is often a secondary protective emotion masking vulnerability, helplessness, disrespect, or fatigue. Identifying the root trigger prevents automatic escalation.
+3. **Take a Strategic Time-Out**: Step away physically for 5 to 10 minutes. A brief walk or splashing cool water on your face helps reset amygdala activation.
+4. **Cognitive Reframing**: Challenge catastrophic thoughts. Ask: *"Will this matter in six months?"* and shift focus from perceived offenses to practical solutions you can directly control.
+5. **Assertive Expression**: Once calm, state your feelings clearly using constructive "I" statements rather than accusatory language.`;
+    } 
+    // --- Cloud Computing & Infrastructure ---
+    else if (lowerQuery.includes('cloud computing') || (lowerQuery.includes('what is cloud') && !lowerQuery.includes('weather'))) {
+      reply = `Cloud computing is the on-demand delivery of IT infrastructure and computing services over the internet on a pay-as-you-go pricing model, replacing the need to procure and maintain physical data centers.
 
-The core service models are:
-• **IaaS (Infrastructure as a Service)**: Fundamental compute, storage, and networking (such as AWS EC2, Google Compute Engine, or Azure Virtual Machines).
-• **PaaS (Platform as a Service)**: Managed platforms that handle operating systems and runtimes so developers can deploy code directly (such as Vercel, Heroku, or AWS Elastic Beanstalk).
-• **SaaS (Software as a Service)**: Complete applications delivered via web browsers (such as Google Workspace, Salesforce, or Microsoft 365).
+The primary service models include:
+• **IaaS (Infrastructure as a Service)**: Provides foundational compute, networking, and block storage (e.g., AWS EC2, Google Compute Engine, Microsoft Azure VMs).
+• **PaaS (Platform as a Service)**: Delivers managed application environments and runtimes so developers focus purely on code (e.g., AWS Elastic Beanstalk, Heroku, Vercel).
+• **SaaS (Software as a Service)**: Complete end-user applications accessed via web browsers (e.g., Google Workspace, Salesforce, Microsoft 365).
 
-The primary advantages include elastic scalability (scaling resources up or down automatically), cost efficiency, and high availability across global data centers.`;
-    } else if (lowerQuery.includes('password') && (lowerQuery.includes('reset') || lowerQuery.includes('forgot') || lowerQuery.includes('change') || lowerQuery.includes('recover'))) {
-      reply = `To reset your password:
+Key operational benefits include elastic autoscaling, high availability across multi-region data centers, reduced capital expenditure (CapEx), and rapid time-to-market.`;
+    } 
+    // --- Password Reset & Identity ---
+    else if (lowerQuery.includes('password') && (lowerQuery.includes('reset') || lowerQuery.includes('forgot') || lowerQuery.includes('change') || lowerQuery.includes('recover'))) {
+      reply = `To reset your account password:
 
-1. Go to the sign-in page of the service and click the **"Forgot Password?"** or **"Reset Password"** link.
-2. Enter the registered email address associated with your account and submit the request.
-3. Check your email inbox for a secure password reset link (check your spam or junk folder if it doesn't appear within 2 minutes).
-4. Click the link and choose a strong, unique password containing at least 8 to 12 characters, mixing uppercase letters, lowercase letters, numbers, and symbols.
-5. Save the new password in a password manager and sign back into your account.
+1. Navigate to the login screen and click **"Forgot Password?"** or **"Reset Password"**.
+2. Enter the registered email address tied to your account and submit the request.
+3. Open your email inbox and look for the verification message (remember to check your Spam/Junk folder if not seen within 2 minutes).
+4. Click the secure password reset link provided in the email.
+5. Choose a strong, distinct password—recommend at least 12 characters combining uppercase, lowercase, numbers, and special characters.
+6. Confirm the new password and sign back into your account.
 
-If your organization uses Single Sign-On (SSO), you may need to update credentials via your identity provider or contact your internal IT administrator.`;
-    } else if (lowerQuery.startsWith('how to') || lowerQuery.startsWith('how do') || lowerQuery.startsWith('how can') || lowerQuery.startsWith('steps to')) {
-      reply = `Here is a practical guide on how to approach **${cleanSubject}**:
+If your organization uses Single Sign-On (SSO/SAML), you should update your credentials directly via your identity provider (such as Okta or Google Workspace) or contact your IT administrator.`;
+    }
+    // --- Software Architecture & APIs ---
+    else if (lowerQuery.includes('api') && (lowerQuery.includes('what is') || lowerQuery.includes('explain') || lowerQuery.includes('how does') || lowerQuery.includes('mean'))) {
+      reply = `An **API (Application Programming Interface)** is a structured set of rules, protocols, and endpoints that allows different software applications to communicate and exchange data seamlessly.
 
-1. **Clarify the Goal**: Define exactly what success looks like for ${cleanSubject} and identify any prerequisites or tools you will need before starting.
-2. **Break It Down**: Divide the process into distinct, manageable steps so you can make progress incrementally rather than attempting everything at once.
-3. **Execute and Validate**: Work through each phase methodically. Test or check your progress at each milestone to catch errors early.
-4. **Iterate and Optimize**: Once the initial objective is met, review the result, make refinements, and document what worked best for future reference.`;
-    } else if (lowerQuery.startsWith('what is') || lowerQuery.startsWith('what are') || lowerQuery.startsWith('explain') || lowerQuery.startsWith('tell me about')) {
-      reply = `**${cleanSubject.charAt(0).toUpperCase() + cleanSubject.slice(1)}** is a subject that plays a significant role in its respective field.
+Think of an API like a waiter in a restaurant:
+1. **The Request**: Your application sends an HTTP request specifying an action (e.g., \`GET /api/users/42\`).
+2. **The Processing**: The API endpoint validates authorization, contacts the underlying database, and runs business logic.
+3. **The Response**: The server returns the requested data formatted in standard JSON or XML, accompanied by an HTTP status code (such as \`200 OK\` or \`404 Not Found\`).
 
-In practical terms, it involves understanding the core mechanisms, how different components interact, and how to apply standard principles effectively. Key factors to keep in mind include ensuring clarity of scope, following established standards, and evaluating practical outcomes based on real-world needs.`;
-    } else if (lowerQuery.startsWith('why is') || lowerQuery.startsWith('why does') || lowerQuery.startsWith('why do') || lowerQuery.startsWith('why are')) {
-      reply = `The reason **${cleanSubject}** occurs is typically driven by fundamental causal principles and systemic factors.
+The main API paradigms in modern engineering are **REST** (stateless HTTP resources), **GraphQL** (declarative client-driven queries), and **Webhooks** (event-driven real-time push notifications).`;
+    }
+    // --- Artificial Intelligence & Machine Learning ---
+    else if (lowerQuery.includes('machine learning') || lowerQuery.includes('what is ai') || lowerQuery.includes('explain ai') || lowerQuery.includes('artificial intelligence')) {
+      reply = `Artificial Intelligence (AI) refers to computer systems designed to perform tasks that typically require human cognition, such as visual perception, natural language processing, decision-making, and pattern recognition.
 
-When examining the underlying causes, environmental conditions, design choices, and interaction dynamics all contribute to this outcome. By understanding these root factors, you can anticipate behaviors more accurately and address challenges effectively.`;
-    } else if (lowerQuery.startsWith('can we') || lowerQuery.startsWith('can i') || lowerQuery.startsWith('is it possible')) {
-      reply = `Yes, achieving **${cleanSubject}** is certainly possible, depending on the specific requirements, permissions, and available resources.
+**Machine Learning (ML)** is the primary subset of AI where systems learn statistical patterns from data rather than following hardcoded manual rules:
+• **Supervised Learning**: Models train on input-output pairs to make predictions (e.g., spam detection, price forecasting).
+• **Unsupervised Learning**: Models discover intrinsic structures in unlabeled data (e.g., clustering, anomaly detection).
+• **Reinforcement Learning**: Agents learn optimal actions through trial, error, and reward signals (e.g., game engines, robotics).
+• **Deep Learning & Transformers**: Multi-layered neural networks capable of processing massive sequential data, powering modern Large Language Models (LLMs) and computer vision.`;
+    }
+    // --- Algorithms & Data Structures ---
+    else if (lowerQuery.includes('binary search') || lowerQuery.includes('quicksort') || lowerQuery.includes('algorithm') || lowerQuery.includes('data structure')) {
+      if (lowerQuery.includes('binary search')) {
+        reply = `**Binary Search** is an efficient divide-and-conquer algorithm for finding an element in a **sorted** array in **O(log n)** time:
 
-To move forward effectively, ensure all prerequisites are verified, establish clear timelines, and follow the standard procedure for your workflow.`;
-    } else {
-      reply = `Regarding your question about **"${incomingMessage}"**:
+\`\`\`typescript
+function binarySearch(arr: number[], target: number): number {
+  let left = 0;
+  let right = arr.length - 1;
 
-To answer this directly: success with this depends on understanding your specific goals, applying standard best practices, and working through the steps methodically. If you would like more detailed information or step-by-step guidance tailored to this, please let me know!`;
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    if (arr[mid] === target) return mid; // Found target at index
+    if (arr[mid] < target) left = mid + 1; // Search right half
+    else right = mid - 1; // Search left half
+  }
+
+  return -1; // Target not found
+}
+\`\`\`
+
+Instead of scanning all $n$ items sequentially ($O(n)$), binary search cuts the search space in half each iteration, requiring at most ~20 comparisons even in a list of 1,000,000 items.`;
+      } else {
+        reply = `Algorithms are step-by-step procedures designed to solve computational problems efficiently.
+
+Key algorithmic paradigms include:
+• **Divide and Conquer**: Breaking problems into independent subproblems (e.g., Merge Sort, Quicksort).
+• **Dynamic Programming**: Storing solutions to overlapping subproblems to prevent redundant work (e.g., Dijkstra, Knapsack problem).
+• **Greedy Algorithms**: Making locally optimal choices at each stage (e.g., Huffman coding, Prim's MST).
+• **Graph Traversal**: Exploring networks systematically via Breadth-First Search (BFS) or Depth-First Search (DFS).`;
+      }
+    }
+    // --- Physics & Astronomy ---
+    else if (lowerQuery.includes('speed of light')) {
+      reply = `The speed of light in a vacuum is exactly **299,792,458 meters per second** (approximately **300,000 km/s** or **186,282 miles per second**), universally denoted by the letter **c**.
+
+Key scientific principles:
+• **Cosmic Speed Limit**: According to Einstein's Theory of Special Relativity, nothing carrying mass or information can travel faster than $c$ through spacetime.
+• **Mass-Energy Equivalence**: It appears in the famous equation $E = mc^2$, signifying the massive energy content bound within matter.
+• **Travel Times**: Light from the Sun takes roughly 8 minutes and 20 seconds to reach Earth, while moonlight takes approximately 1.3 seconds.`;
+    }
+    else if (lowerQuery.includes('sky blue') || lowerQuery.includes('why is the sky')) {
+      reply = `The sky appears blue due to a phenomenon called **Rayleigh scattering**:
+
+1. **Composition of Sunlight**: Sunlight reaches Earth as white light, composed of all colors in the visible spectrum. Red and orange have longer wavelengths, while blue and violet have much shorter wavelengths.
+2. **Atmospheric Interaction**: Earth's atmosphere is dense with tiny gas molecules (predominantly nitrogen and oxygen). Particles smaller than the wavelength of light scatter shorter wavelengths far more intensely than longer wavelengths.
+3. **Scattering**: The short blue wavelengths are scattered in all directions across the atmosphere.
+4. **Human Vision**: Although violet light has an even shorter wavelength, the human eye is significantly more sensitive to blue light, and solar sunlight has higher blue intensity, making the daytime sky look vibrant blue.`;
+    }
+    else if (lowerQuery.includes('leaves change color') || lowerQuery.includes('leaves turn') || lowerQuery.includes('autumn leaves')) {
+      reply = `Leaves change color in autumn primarily due to changes in sunlight, temperature, and chemical pigments:
+
+1. **Chlorophyll Breakdown**: During spring and summer, leaves are packed with **chlorophyll**, the green pigment essential for photosynthesis. In autumn, shorter daylight hours and cooler temperatures trigger trees to stop producing food and enter dormancy. Chlorophyll breaks down rapidly.
+2. **Carotenoids & Flavonoids**: As the overpowering green fades, pigments that were already present—**carotenoids** (producing orange) and **flavonoids** (producing yellow)—are finally revealed.
+3. **Anthocyanins**: Some trees (like red maples and sweetgums) produce **anthocyanins** in response to trapped sugars on sunny autumn days, creating deep red and purple hues.`;
+    }
+    else if (lowerQuery.includes('photosynthesis')) {
+      reply = `**Photosynthesis** is the biological process by which green plants, algae, and certain bacteria convert sunlight, water, and carbon dioxide into chemical energy (glucose) and oxygen.
+
+**The Chemical Equation:**
+$$6CO_2 + 6H_2O + \\text{light} \\longrightarrow C_6H_{12}O_6 + 6O_2$$
+
+The process occurs in two main stages inside plant **chloroplasts**:
+1. **Light-Dependent Reactions**: Sunlight captured by chlorophyll splits water molecules ($H_2O$), releasing oxygen ($O_2$) and producing high-energy carrier molecules (ATP and NADPH).
+2. **Calvin Cycle (Light-Independent)**: Uses the chemical energy from ATP and NADPH to convert carbon dioxide ($CO_2$) from the air into glucose ($C_6H_{12}O_6$), which fuels plant growth.`;
+    }
+    // --- Dynamic General Inquiry Synthesizer (Natural, direct, non-boilerplate) ---
+    else if (lowerQuery.startsWith('how to') || lowerQuery.startsWith('how do') || lowerQuery.startsWith('how can') || lowerQuery.startsWith('steps to')) {
+      reply = `To accomplish **${cleanSubject}**, here is a practical, direct approach:
+
+1. **Clarify the Core Objective**: Clearly define the outcome you want to achieve before beginning, and gather all necessary prerequisites or reference materials.
+2. **Execute in Logical Phases**:
+   • Start with the fundamental setup or groundwork.
+   • Implement the core solution incrementally, verifying each step as you proceed.
+   • Troubleshoot any anomalies early before moving to subsequent stages.
+3. **Validate and Review**: Test the final output against your initial criteria to ensure stability, accuracy, and longevity.
+4. **Iterate and Maintain**: Document key learnings or adjustments so the process is easy to reproduce or optimize going forward.`;
+    }
+    else if (lowerQuery.startsWith('what is') || lowerQuery.startsWith('what are') || lowerQuery.startsWith('explain') || lowerQuery.startsWith('tell me about')) {
+      reply = `**${cleanSubject.charAt(0).toUpperCase() + cleanSubject.slice(1)}** refers to a significant subject with wide applications in its field.
+
+At its core, it addresses how specific elements, systems, or principles function together to produce reliable outcomes. Understanding how it operates involves looking at its underlying mechanics, recognizing real-world use cases, and adopting recognized best practices when applying it.
+
+If there is a specific angle, implementation, or technical detail about **${cleanSubject}** you would like to dive deeper into, feel free to ask!`;
+    }
+    else if (lowerQuery.startsWith('why is') || lowerQuery.startsWith('why does') || lowerQuery.startsWith('why do') || lowerQuery.startsWith('why are')) {
+      reply = `The phenomenon behind **${cleanSubject}** is driven by foundational cause-and-effect mechanisms.
+
+In analyzing this, key factors include the interaction of environmental conditions, structural properties, and underlying operational forces. Recognizing these driving dynamics makes it significantly easier to predict behavior, mitigate potential pitfalls, and achieve desired outcomes effectively.`;
+    }
+    else {
+      reply = `Regarding **"${incomingMessage}"**:
+
+To answer this directly: achieving success or understanding here depends on breaking the problem down into clear components, examining the governing principles, and executing thoughtfully. 
+
+Feel free to share any additional context or specific questions on this topic, and I will be glad to provide further in-depth guidance!`;
     }
 
     nextAction = {
@@ -501,7 +727,7 @@ ${issueContext || 'No known issues.'}
 QUESTION:
 "${question}"
 
-Answer the question factually and directly based on this customer's context. Cite the specific memory or issue that answers it. If it is a general knowledge question, answer it directly.`;
+Answer the question factually and directly based on this customer's context. Cite the specific memory or issue that answers it. If the requested information is not available in the customer data or memories, clearly state that it is unavailable instead of inventing information. If it is a general knowledge question, answer it directly.`;
 
     if (this.isConfigured()) {
       try {

@@ -5,6 +5,7 @@ import path from 'path';
 
 // Load environment variables
 dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 import authRouter from './routes/auth.js';
 import customersRouter from './routes/customers.js';
