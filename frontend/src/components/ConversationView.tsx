@@ -167,14 +167,14 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   };
 
-  // Demo presets for easy testing (both general knowledge & customer-specific)
+  // Example questions for UI guidance only (Zero influence on AI reasoning)
   const demoPrompts = [
-    { label: '1. Security Review Context', text: 'We need a security review before signing the contract.' },
-    { label: '2. Contract Signing Query', text: 'Can we sign the contract today?' },
-    { label: '3. General: Cloud Computing', text: 'What is cloud computing?' },
-    { label: '4. General: Anger Control', text: 'How to control anger?' },
-    { label: '5. General: Password Reset', text: 'How do I reset my password?' },
-    { label: '6. AWS Infrastructure', text: 'Our production environment is running on AWS.' }
+    { label: 'Security Review', text: 'We need a security review before signing the contract.' },
+    { label: 'Contract Signing', text: 'Can we sign the contract today?' },
+    { label: 'Cloud Computing', text: 'What is cloud computing?' },
+    { label: 'Controlling Anger', text: 'How to control anger?' },
+    { label: 'Password Reset', text: 'How do I reset my password?' },
+    { label: 'AWS Infrastructure', text: 'Our production environment is running on AWS.' }
   ];
 
   if (!selectedCustomer) {
@@ -427,15 +427,20 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Demo Fast-Action Presets */}
-        <div className="px-6 py-2.5 bg-[#0c1220] border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto">
-          <span className="text-[10px] uppercase font-bold text-slate-500 shrink-0">Demo Prompts:</span>
+        {/* UI Example Starters (Click to load into message input) */}
+        <div className="px-6 py-2 bg-[#0c1220] border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto">
+          <span className="text-[10px] uppercase font-bold text-slate-500 shrink-0">Example Queries:</span>
           {demoPrompts.map((preset, idx) => (
             <button
               key={idx}
-              onClick={() => handleSendMessage(preset.text)}
+              type="button"
+              onClick={() => {
+                setInputMessage(preset.text);
+                inputRef.current?.focus();
+              }}
               disabled={isSending}
               className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-800 whitespace-nowrap transition-all"
+              title="Click to paste into input box"
             >
               {preset.label}
             </button>

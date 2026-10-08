@@ -129,44 +129,35 @@ export class HindsightService {
       return [];
     }
 
-    const queryWords = query.toLowerCase()
-      .replace(/[^\w\s]/g, '')
+    const stopWords = new Set([
+      'what', 'is', 'how', 'why', 'who', 'when', 'where', 'which', 'can', 'could',
+      'would', 'should', 'the', 'a', 'an', 'and', 'or', 'to', 'in', 'on', 'at',
+      'by', 'for', 'with', 'about', 'from', 'into', 'my', 'our', 'your', 'their',
+      'his', 'her', 'its', 'this', 'that', 'these', 'those', 'do', 'does', 'did',
+      'done', 'be', 'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had',
+      'tell', 'me', 'explain', 'please', 'just', 'we', 'i', 'you'
+    ]);
+
+    const queryTerms = query.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
       .split(/\s+/)
-      .filter(w => w.length > 2);
+      .filter(w => w.length > 2 && !stopWords.has(w));
+
+    if (queryTerms.length === 0) {
+      return [];
+    }
 
     const scored = customerMemories.map(mem => {
-      const memWords = mem.content.toLowerCase().split(/\s+/);
+      const memWords = mem.content.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !stopWords.has(w));
+
       let matchCount = 0;
-      
-      // Keyword match
-      for (const qw of queryWords) {
-        if (memWords.some(mw => mw.includes(qw) || qw.includes(mw))) {
+      for (const qt of queryTerms) {
+        if (memWords.some(mw => mw === qt || (mw.length > 4 && qt.length > 4 && (mw.startsWith(qt) || qt.startsWith(mw))))) {
           matchCount += 2;
         }
-      }
-
-      // Contextual synonym matching for support topics
-      const qLower = query.toLowerCase();
-      const mLower = mem.content.toLowerCase();
-      
-      if ((qLower.includes('contract') || qLower.includes('sign') || qLower.includes('deal')) && 
-          (mLower.includes('security') || mLower.includes('review') || mLower.includes('sign') || mLower.includes('contract'))) {
-        matchCount += 5;
-      }
-
-      if ((qLower.includes('deploy') || qLower.includes('cloud') || qLower.includes('host') || qLower.includes('server')) &&
-          (mLower.includes('aws') || mLower.includes('azure') || mLower.includes('gcp') || mLower.includes('kubernetes') || mLower.includes('production'))) {
-        matchCount += 5;
-      }
-
-      if ((qLower.includes('login') || qLower.includes('auth') || qLower.includes('access')) &&
-          (mLower.includes('login') || mLower.includes('auth') || mLower.includes('sso') || mLower.includes('permission'))) {
-        matchCount += 5;
-      }
-
-      if ((qLower.includes('contact') || qLower.includes('reach') || qLower.includes('channel') || qLower.includes('email')) &&
-          (mLower.includes('email') || mLower.includes('phone') || mLower.includes('slack') || mLower.includes('channel'))) {
-        matchCount += 5;
       }
 
       return {
@@ -178,8 +169,8 @@ export class HindsightService {
     // Sort by score descending, then by recent timestamp
     scored.sort((a, b) => b.score - a.score);
 
-    // If matches found with score > 0, return top matches
-    const topMatches = scored.filter(s => s.score > 0).slice(0, topK);
+    // Require genuine keyword overlap (score >= 2)
+    const topMatches = scored.filter(s => s.score >= 2).slice(0, topK);
     
     // If no strong match was found (e.g. general question unrelated to customer history),
     // return empty array so unrelated customer memories are NOT forced into the response.
