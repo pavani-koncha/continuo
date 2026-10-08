@@ -156,14 +156,28 @@ router.post('/:id/messages', async (req: AuthenticatedRequest, res: Response) =>
       }
     }
 
-    // 6. Update customer health & summary if provided
-    if (aiResult.customerHealth || aiResult.customerSummary) {
-      storageService.updateCustomer(customer.id, {
-        ...(aiResult.customerHealth && { health: aiResult.customerHealth }),
-        ...(aiResult.healthReason && { healthReason: aiResult.healthReason }),
-        ...(aiResult.customerSummary && { summary: aiResult.customerSummary })
-      }, req.user?.id);
-    }
+    // 6. Update customer health, priority, summary & follow-up tasks if provided
+    const newFollowUpTasks = (aiResult.followUpTasks || []).map(t => ({
+      id: crypto.randomUUID(),
+      userId: req.user?.id,
+      customerId: customer.id,
+      title: t.title,
+      dueDate: t.dueDate || 'Next touchpoint',
+      status: 'pending' as const,
+      priority: t.priority,
+      createdAt: new Date().toISOString()
+    }));
+
+    const existingTasks = Array.isArray(customer.followUpTasks) ? customer.followUpTasks : [];
+
+    storageService.updateCustomer(customer.id, {
+      ...(aiResult.customerHealth && { health: aiResult.customerHealth }),
+      ...(aiResult.customerPriority && { priority: aiResult.customerPriority }),
+      ...(aiResult.healthReason && { healthReason: aiResult.healthReason }),
+      ...(aiResult.customerSummary && { summary: aiResult.customerSummary }),
+      ...(aiResult.conversationSummary && { conversationSummary: aiResult.conversationSummary }),
+      ...(newFollowUpTasks.length > 0 && { followUpTasks: [...newFollowUpTasks, ...existingTasks] })
+    }, req.user?.id);
 
     // 7. Create Continuo AI response message with explainability & Next Action
     const continuoMsg: Message = {

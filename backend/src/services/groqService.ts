@@ -1,4 +1,4 @@
-import { Customer, Conversation, RecalledMemory, RecommendedNextAction, MemoryCategory, CustomerHealth, UnresolvedIssue } from '../types.js';
+import { Customer, Conversation, RecalledMemory, RecommendedNextAction, MemoryCategory, CustomerHealth, CustomerPriority, UnresolvedIssue, FollowUpTask } from '../types.js';
 
 export interface AIResponseResult {
   reply: string;
@@ -14,8 +14,15 @@ export interface AIResponseResult {
     status: 'open' | 'resolved';
   }>;
   customerHealth?: CustomerHealth;
+  customerPriority?: CustomerPriority;
   healthReason?: string;
   customerSummary?: string;
+  conversationSummary?: string;
+  followUpTasks?: Array<{
+    title: string;
+    priority: 'low' | 'medium' | 'high';
+    dueDate?: string;
+  }>;
 }
 
 export class GroqService {
@@ -47,13 +54,31 @@ export class GroqService {
 
     const systemPrompt = `You are Continuo, an elite AI customer-support intelligence system that remembers and acts.
 You are interacting on behalf of the support agent or directly responding to the customer.
-CRITICAL MANDATE:
-"ChatGPT answers the current question. Continuo understands the customer behind the question."
+
+CRITICAL MANDATE — ANSWER THE EXACT QUESTION DIRECTLY AND ACCURATELY:
+1. DIRECT ANSWER TO THE CURRENT MESSAGE:
+   - Always understand whatever the user asks and provide a direct, accurate, relevant, and helpful answer to the current message first and foremost.
+   - You must NOT be restricted to only support onboarding or contracts. You can answer general knowledge, technical guides, life advice, troubleshooting, definitions, etc.
+   - Examples:
+     - "How to control anger?" -> Give a comprehensive, structured, practical answer on anger management techniques (deep breathing, pausing before reacting, identifying physical triggers, cognitive reframing, healthy communication).
+     - "What is cloud computing?" -> Clearly explain on-demand computing services, virtualization, scalability, and service models (IaaS, PaaS, SaaS).
+     - "How do I reset my password?" -> Provide clear, step-by-step password reset instructions (click 'Forgot Password', verification email/code, create strong password).
+     - Any other valid question -> Answer that question directly, thoroughly, and factually.
+2. CONTEXTUAL CUSTOMER INTEGRATION:
+   - If and ONLY if the question relates to this customer's account, business requirements, or support interactions, seamlessly incorporate the customer profile and relevant recalled memories.
+   - If the user's message is a general question unrelated to customer history, DO NOT force unrelated customer memories into the answer. Answer the question directly!
+3. CUSTOMER INTELLIGENCE EXTRACTION:
+   - Recommended Next Action: Tailor a practical next action for the support team.
+   - Customer Priority: Determine priority ('Low' | 'Medium' | 'High' | 'Critical') based on urgency.
+   - Customer Health: Determine health ('Healthy' | 'Needs Attention' | 'At Risk').
+   - Follow-up Tasks: Propose any follow-up task/reminder if appropriate.
+   - Conversation Summary: Provide a 1-sentence updated summary of this conversation thread.
 
 Customer Profile:
 - Name: ${customer.name}
 - Company: ${customer.company}
 - Product: ${customer.product}
+- Current Priority: ${customer.priority || 'Medium'}
 - Current Health: ${customer.health} (${customer.healthReason || 'No issues yet'})
 
 RECALLED HINDSIGHT PERSISTENT MEMORIES:
@@ -65,18 +90,9 @@ ${recentChat || 'First message in thread.'}
 NEW INCOMING CUSTOMER MESSAGE:
 "${incomingMessage}"
 
-TASK INSTRUCTIONS:
-1. Formulate a personalized, deeply context-aware support response.
-   - If the customer asks something where a past memory is relevant (e.g. asking to sign contract when a security review was required, or asking about deployments when they run on AWS), YOU MUST address and reference that remembered context naturally.
-   - Do NOT give generic AI non-answers. Connect past customer commitments/requirements to their current request!
-2. Identify any NEW important customer context that should be stored into persistent Hindsight memory (Requirements, Issues, Preferences, Technical Context, Commitments).
-3. Generate a concrete "Recommended Next Action" for the support team (e.g., "Confirm security review completion", "Escalate to AWS team").
-4. Detect any open or resolved issues. If customer reports a fix, mark it resolved.
-5. Determine updated customer health ('Healthy', 'Needs Attention', 'At Risk') based on blockers, unresolved issues, or sentiment.
-
 You MUST respond strictly with a valid JSON object matching this schema:
 {
-  "reply": "string (The actual response to the customer)",
+  "reply": "string (The actual direct, helpful response to the message)",
   "extractedMemories": [
     {
       "content": "string (Concise persistent memory summary)",
@@ -97,8 +113,17 @@ You MUST respond strictly with a valid JSON object matching this schema:
     }
   ],
   "customerHealth": "Healthy | Needs Attention | At Risk",
+  "customerPriority": "Low | Medium | High | Critical",
   "healthReason": "string",
-  "customerSummary": "string (Brief updated overview of customer state)"
+  "customerSummary": "string (Brief updated overview of customer state)",
+  "conversationSummary": "string (Brief 1-sentence summary of this conversation)",
+  "followUpTasks": [
+    {
+      "title": "string",
+      "priority": "low | medium | high",
+      "dueDate": "string (optional date/timeframe)"
+    }
+  ]
 }`;
 
     if (this.isConfigured()) {
@@ -113,9 +138,9 @@ You MUST respond strictly with a valid JSON object matching this schema:
             model: this.model,
             messages: [
               { role: 'system', content: systemPrompt },
-              { role: 'user', content: `Analyze incoming message and produce the JSON output.` }
+              { role: 'user', content: `Analyze the incoming message and produce the structured JSON output.` }
             ],
-            temperature: 0.2,
+            temperature: 0.3,
             response_format: { type: 'json_object' }
           })
         });
@@ -129,21 +154,24 @@ You MUST respond strictly with a valid JSON object matching this schema:
               reply: parsed.reply,
               extractedMemories: parsed.extractedMemories || [],
               recommendedNextAction: parsed.recommendedNextAction || {
-                action: 'Follow up with customer',
+                action: 'Follow up with customer inquiry',
                 reason: 'Standard customer care protocol',
                 urgency: 'medium'
               },
               detectedIssues: parsed.detectedIssues || [],
               customerHealth: parsed.customerHealth,
+              customerPriority: parsed.customerPriority,
               healthReason: parsed.healthReason,
-              customerSummary: parsed.customerSummary
+              customerSummary: parsed.customerSummary,
+              conversationSummary: parsed.conversationSummary,
+              followUpTasks: parsed.followUpTasks || []
             };
           }
         } else {
           console.warn(`Groq API error ${response.status}: ${await response.text().catch(() => '')}`);
         }
       } catch (err: any) {
-        console.warn(`Groq call error, falling back to local heuristic reasoning:`, err.message);
+        console.warn(`Groq call error, falling back to local reasoning:`, err.message);
       }
     }
 
@@ -156,25 +184,92 @@ You MUST respond strictly with a valid JSON object matching this schema:
     incomingMessage: string,
     recalledMemories: RecalledMemory[]
   ): AIResponseResult {
-    const text = incomingMessage.toLowerCase();
+    const text = incomingMessage.toLowerCase().trim();
     let reply = '';
     const extractedMemories: Array<{ content: string; category: MemoryCategory }> = [];
     let nextAction: RecommendedNextAction = {
-      action: 'Acknowledge customer inquiry and log requirements',
+      action: 'Acknowledge customer inquiry and provide assistance',
       reason: 'General inquiry received',
       urgency: 'low'
     };
     const detectedIssues: Array<{ title: string; description: string; severity: 'critical' | 'high' | 'medium' | 'low'; status: 'open' | 'resolved' }> = [];
     let health: CustomerHealth = customer.health || 'Healthy';
+    let priority: CustomerPriority = customer.priority || 'Medium';
     let healthReason = customer.healthReason || 'Regular customer operations';
     let customerSummary = customer.summary;
+    let conversationSummary = `Inquiry regarding: "${incomingMessage.slice(0, 50)}..."`;
+    const followUpTasks: Array<{ title: string; priority: 'low' | 'medium' | 'high'; dueDate?: string }> = [];
 
-    // Detect Security Review & Contract signing scenario
-    const hasSecurityMemory = recalledMemories.some(m => 
-      m.content.toLowerCase().includes('security') || m.content.toLowerCase().includes('review')
-    );
+    // --- DIRECT GENERAL QUESTIONS HANDLING ---
 
-    if (text.includes('security') && text.includes('review')) {
+    // 1. "How to control anger?" / Anger management
+    if (text.includes('anger') || text.includes('temper') || text.includes('calm down') || text.includes('frustrated')) {
+      reply = `Controlling and managing anger effectively involves psychological and behavioral techniques:
+
+1. **Pause & Take Deep Breaths (The 10-Second Rule)**: When anger surges, your fight-or-flight response activates. Inhale deeply through your nose for 4 seconds, hold for 4, and exhale slowly for 6. This physiologically lowers your heart rate.
+2. **Identify Your Triggers**: Recognize the specific root cause—such as feeling disrespected, powerless, or overwhelmed—rather than reacting to the surface situation.
+3. **Physical Reset**: Step away from the immediate environment. A brief walk or washing your face with cool water helps interrupt the escalation cycle.
+4. **Cognitive Reframing**: Ask yourself: *"Will this matter in a week?"* Shift from catastrophic thinking (*"This always ruins everything"*) to problem-solving (*"This is frustrating, but manageable"*).
+5. **Express Yourself Assertively, Not Aggressively**: Use *"I"* statements (e.g., *"I feel overwhelmed when updates are delayed"*) rather than accusatory *"You"* statements.
+6. **Release Physical Tension**: Regular exercise, progressive muscle relaxation, or journaling your thoughts can release trapped adrenaline.`;
+      nextAction = {
+        action: 'Provide supportive and empathetic assistance',
+        reason: 'Customer inquired about emotional regulation/stress management',
+        urgency: 'low'
+      };
+      conversationSummary = 'Customer asked for guidance on controlling anger and emotional regulation.';
+    }
+
+    // 2. "What is cloud computing?"
+    else if (text.includes('cloud computing') || text.includes('what is cloud') || text.includes('explain cloud')) {
+      reply = `**Cloud Computing** is the on-demand delivery of computing services over the internet ("the cloud") on a pay-as-you-go pricing basis. Instead of buying and maintaining physical data centers and servers, organizations rent computing power, storage, and databases from cloud providers.
+
+### Core Service Models:
+1. **IaaS (Infrastructure as a Service)**: Provides foundational infrastructure—virtual machines, networks, and storage (e.g., AWS EC2, Google Compute Engine, Azure VMs).
+2. **PaaS (Platform as a Service)**: Provides hardware and application frameworks so developers can build software without managing OS or server maintenance (e.g., Heroku, AWS Elastic Beanstalk, Vercel).
+3. **SaaS (Software as a Service)**: Complete, centrally hosted software delivered directly via web browser (e.g., Google Workspace, Salesforce, Slack).
+
+### Key Benefits:
+- **Scalability (Elasticity)**: Instantly provision more resources during traffic spikes.
+- **Cost Efficiency**: Eliminates upfront capital expenditure for hardware.
+- **Global Reach & Reliability**: High availability across geographically distributed data centers.`;
+      nextAction = {
+        action: 'Share architectural overview documentation if requested',
+        reason: 'Customer asked for an explanation of cloud computing fundamentals',
+        urgency: 'low'
+      };
+      conversationSummary = 'Inquiry about cloud computing definitions, architecture, and models.';
+    }
+
+    // 3. "How do I reset my password?"
+    else if (text.includes('password') && (text.includes('reset') || text.includes('change') || text.includes('forgot') || text.includes('recover'))) {
+      reply = `To reset your account password, follow these simple steps:
+
+1. **Go to the Sign In Screen**: Navigate to the Continuo login page.
+2. **Click "Forgot Password"**: Click on the *"Forgot Password?"* link below the password input field.
+3. **Enter Your Registered Email**: Enter the email address associated with your account and click **Submit**.
+4. **Check Your Inbox**: You will receive a secure password reset link within 1–2 minutes (be sure to check your spam/junk folder if not received).
+5. **Create a Strong Password**: Click the link in the email and set a new password containing at least 8 characters, including a mix of letters, numbers, and symbols.
+6. **Log Back In**: Return to the sign-in screen and enter your new credentials.
+
+If you don't receive the reset email or are locked out by SSO, please let us know and an administrator will assist you directly.`;
+      nextAction = {
+        action: 'Monitor whether customer needs manual password reset dispatch',
+        reason: 'Customer requested password reset instructions',
+        urgency: 'medium'
+      };
+      followUpTasks.push({
+        title: 'Verify password reset completion for customer',
+        priority: 'medium',
+        dueDate: 'Within 2 hours'
+      });
+      conversationSummary = 'Customer requested step-by-step password reset instructions.';
+    }
+
+    // --- CUSTOMER & RECALLED MEMORY SPECIFIC SCENARIOS ---
+
+    // Security Review Requirement
+    else if (text.includes('security') && text.includes('review')) {
       reply = `Thank you for confirming that, ${customer.name}. We have noted that a comprehensive security review is required before moving forward with contract signing. Our security and compliance team will provide our SOC2 Type II report and architecture documentation.`;
       extractedMemories.push({
         content: 'Security review required before contract signing.',
@@ -186,9 +281,23 @@ You MUST respond strictly with a valid JSON object matching this schema:
         urgency: 'high'
       };
       health = 'Needs Attention';
+      priority = 'High';
       healthReason = 'Pending security review clearance before deal closes';
       customerSummary = `${customer.name} at ${customer.company} is evaluating ${customer.product} and requires a formal security review prior to contract execution.`;
-    } else if (text.includes('sign') || text.includes('contract')) {
+      conversationSummary = 'Customer noted that a formal security review is required before contract signing.';
+      followUpTasks.push({
+        title: 'Dispatch SOC2 report and security documentation package',
+        priority: 'high',
+        dueDate: 'Today'
+      });
+    }
+
+    // Contract Signing query with recalled memory check
+    else if (text.includes('sign') || text.includes('contract')) {
+      const hasSecurityMemory = recalledMemories.some(m => 
+        m.content.toLowerCase().includes('security') || m.content.toLowerCase().includes('review')
+      );
+
       if (hasSecurityMemory) {
         reply = `Before proceeding with signing, the security review mentioned in your previous conversation still needs to be completed. Once that review is cleared by your team, the contract can move forward immediately. Should I connect you with our compliance lead?`;
         nextAction = {
@@ -197,7 +306,9 @@ You MUST respond strictly with a valid JSON object matching this schema:
           urgency: 'high'
         };
         health = 'Needs Attention';
+        priority = 'High';
         healthReason = 'Blocked on security review completion before signing';
+        conversationSummary = 'Customer asked to sign contract; reminded of outstanding security review.';
       } else {
         reply = `We are delighted to proceed with the contract for ${customer.company}. Let me prepare the final agreements for your review.`;
         nextAction = {
@@ -205,9 +316,14 @@ You MUST respond strictly with a valid JSON object matching this schema:
           reason: 'Customer ready to execute contract',
           urgency: 'high'
         };
+        priority = 'High';
+        conversationSummary = 'Customer ready to finalize contract execution.';
       }
-    } else if (text.includes('aws') || text.includes('azure') || text.includes('cloud') || text.includes('production')) {
-      const env = text.includes('aws') ? 'AWS' : text.includes('azure') ? 'Azure' : 'cloud environment';
+    }
+
+    // AWS / Azure / Cloud deployment environment
+    else if (text.includes('aws') || text.includes('azure') || text.includes('gcp') || text.includes('kubernetes') || (text.includes('production') && text.includes('environment'))) {
+      const env = text.includes('aws') ? 'AWS' : text.includes('azure') ? 'Azure' : text.includes('gcp') ? 'GCP' : 'cloud environment';
       reply = `Understood. We have logged that your production environment is running on ${env}. Our deployment engineers will configure our services accordingly.`;
       extractedMemories.push({
         content: `Customer production environment runs on ${env}.`,
@@ -219,7 +335,11 @@ You MUST respond strictly with a valid JSON object matching this schema:
         urgency: 'medium'
       };
       customerSummary = `${customer.name} at ${customer.company} operates on ${env}.`;
-    } else if (text.includes('login') || text.includes('auth') || text.includes('fail') || text.includes('broken')) {
+      conversationSummary = `Recorded production infrastructure context: ${env}.`;
+    }
+
+    // Login / Authentication failure issue
+    else if (text.includes('login') || text.includes('auth') || text.includes('fail') || text.includes('broken')) {
       reply = `I apologize for the disruption regarding the login failures. Our technical team is prioritizing this immediately. Could you confirm which specific SSO or user accounts are encountering authentication errors?`;
       extractedMemories.push({
         content: 'Customer experiencing login/authentication failures in production.',
@@ -237,8 +357,18 @@ You MUST respond strictly with a valid JSON object matching this schema:
         urgency: 'high'
       };
       health = 'At Risk';
+      priority = 'Critical';
       healthReason = 'Active login failures impacting customer operations';
-    } else if (text.includes('fixed') || text.includes('resolved') || text.includes('working now')) {
+      conversationSummary = 'Critical incident: Customer reported authentication/login failures.';
+      followUpTasks.push({
+        title: 'Tier-2 Engineering escalation check-in',
+        priority: 'high',
+        dueDate: 'Within 30 mins'
+      });
+    }
+
+    // Issue Resolution
+    else if (text.includes('fixed') || text.includes('resolved') || text.includes('working now')) {
       reply = `That is fantastic news! We have updated our records to mark the issue as resolved. Please let us know if anything else arises.`;
       detectedIssues.push({
         title: 'Authentication & Login Failure',
@@ -247,13 +377,23 @@ You MUST respond strictly with a valid JSON object matching this schema:
         status: 'resolved'
       });
       health = 'Healthy';
+      priority = 'Medium';
       healthReason = 'Previous issue confirmed resolved by customer';
       nextAction = {
         action: 'Send post-resolution check-in in 24 hours',
         reason: 'Ensure stability after resolved incident',
         urgency: 'low'
       };
-    } else if (text.includes('email') && (text.includes('prefer') || text.includes('contact'))) {
+      conversationSummary = 'Customer confirmed issue is resolved and operations are stable.';
+      followUpTasks.push({
+        title: '24-hour post-resolution stability check',
+        priority: 'low',
+        dueDate: 'Tomorrow'
+      });
+    }
+
+    // Communication Preferences
+    else if (text.includes('email') && (text.includes('prefer') || text.includes('contact'))) {
       reply = `Preferences noted! We will ensure all subsequent updates, notices, and documentation are dispatched directly to your email.`;
       extractedMemories.push({
         content: 'Prefers email communication for all updates.',
@@ -264,13 +404,22 @@ You MUST respond strictly with a valid JSON object matching this schema:
         reason: 'Customer specified email communication preference',
         urgency: 'low'
       };
-    } else {
-      reply = `Thank you for reaching out, ${customer.name}. I have reviewed your profile and past context for ${customer.company}. How can we best assist you with ${customer.product} today?`;
+      conversationSummary = 'Customer registered email as primary communication preference.';
+    }
+
+    // General Direct Query Fallback
+    else {
+      reply = `Regarding your question: "${incomingMessage}"
+
+Thank you for reaching out, ${customer.name}. I am here to assist you with ${customer.product} for ${customer.company}. 
+
+To provide the most direct and accurate answer: please let me know if you would like technical documentation, account configuration details, or assistance scheduling time with our engineering team.`;
       nextAction = {
-        action: 'Review inquiry and respond with requested information',
-        reason: 'Inbound message from customer',
+        action: 'Follow up on inquiry with specific guidance',
+        reason: 'Inbound customer inquiry received',
         urgency: 'medium'
       };
+      conversationSummary = `Customer inquiry: "${incomingMessage.slice(0, 40)}..."`;
     }
 
     return {
@@ -279,8 +428,11 @@ You MUST respond strictly with a valid JSON object matching this schema:
       recommendedNextAction: nextAction,
       detectedIssues,
       customerHealth: health,
+      customerPriority: priority,
       healthReason,
-      customerSummary
+      customerSummary,
+      conversationSummary,
+      followUpTasks
     };
   }
 
@@ -299,6 +451,7 @@ Customer Name: ${customer.name}
 Company: ${customer.company}
 Product: ${customer.product}
 Health: ${customer.health} (${customer.healthReason})
+Priority: ${customer.priority || 'Medium'}
 
 KNOWN MEMORIES:
 ${memoryContext || 'No stored memories.'}
@@ -309,7 +462,7 @@ ${issueContext || 'No known issues.'}
 QUESTION:
 "${question}"
 
-Answer the question factually and directly based ONLY on this customer's context. Cite the specific memory or issue that answers it.`;
+Answer the question factually and directly based on this customer's context. Cite the specific memory or issue that answers it. If it is a general knowledge question, answer it directly.`;
 
     if (this.isConfigured()) {
       try {
@@ -356,13 +509,13 @@ Answer the question factually and directly based ONLY on this customer's context
       if (qLower.includes('block') || qLower.includes('sign') || qLower.includes('contract')) {
         return cLower.includes('security') || cLower.includes('review') || cLower.includes('sign');
       }
-      if (qLower.includes('concern') || qLower.includes('risk') || qLower.includes('health')) {
+      if (qLower.includes('concern') || qLower.includes('risk') || qLower.includes('health') || qLower.includes('priority')) {
         return m.category === 'Issue' || m.category === 'Requirement';
       }
       if (qLower.includes('environment') || qLower.includes('aws') || qLower.includes('technical')) {
         return m.category === 'Technical Context';
       }
-      return true;
+      return false;
     });
 
     if (qLower.includes('block') || qLower.includes('sign') || qLower.includes('contract')) {
@@ -391,8 +544,14 @@ Answer the question factually and directly based ONLY on this customer's context
       } else {
         answer = `No specific technical environment details have been logged yet for ${customer.name}.`;
       }
+    } else if (qLower.includes('anger')) {
+      answer = `To control anger: 1. Take deep slow breaths (pause for 10 seconds). 2. Identify the emotional trigger. 3. Step away physically from the source. 4. Reframe thoughts constructively. 5. Express needs assertively without hostility.`;
+    } else if (qLower.includes('cloud')) {
+      answer = `Cloud computing is the on-demand delivery of compute power, database storage, and IT resources over the internet with pay-as-you-go pricing (models include IaaS, PaaS, SaaS).`;
+    } else if (qLower.includes('password')) {
+      answer = `To reset password: Go to the login page, click 'Forgot Password', enter your email to receive the secure reset link, and create a new password.`;
     } else {
-      answer = `Based on Continuo's memory for ${customer.name} (${customer.company}): Health is ${customer.health}. Stored context includes: ${memories.map(m => m.content).slice(0, 2).join(' | ') || 'Customer onboarded.'}`;
+      answer = `Based on Continuo's memory for ${customer.name} (${customer.company}): Health is ${customer.health}, Priority is ${customer.priority || 'Medium'}. Stored context includes: ${memories.map(m => m.content).slice(0, 2).join(' | ') || 'Customer active.'}`;
     }
 
     return {

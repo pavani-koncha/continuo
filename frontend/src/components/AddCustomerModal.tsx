@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Plus, Sparkles, Building, Mail, Package, User } from 'lucide-react';
+import { X, Plus, Sparkles, Building, Mail, Package, User, Flag } from 'lucide-react';
 import { api } from '../services/api';
-import { Customer } from '../types';
+import { Customer, CustomerPriority } from '../types';
 
 interface AddCustomerModalProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
   const [company, setCompany] = useState('');
   const [email, setEmail] = useState('');
   const [product, setProduct] = useState('');
+  const [priority, setPriority] = useState<CustomerPriority>('Medium');
   const [initialNotes, setInitialNotes] = useState('');
   const [tags, setTags] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -29,6 +30,7 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
     setCompany('NovaTech');
     setEmail('alex.morgan@novatech.io');
     setProduct('Enterprise Platform');
+    setPriority('High');
     setInitialNotes('Evaluating enterprise plan; strict compliance requirements.');
     setTags('enterprise, prospect, security-conscious');
   };
@@ -44,6 +46,7 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
         company: company.trim(),
         email: email.trim(),
         product: product.trim() || 'General Product',
+        priority,
         initialNotes: initialNotes.trim(),
         tags: tags ? tags.split(',').map(t => t.trim()) : []
       });
@@ -145,6 +148,33 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Customer Priority Selector */}
+          <div>
+            <label className="text-xs font-medium text-slate-400 block mb-1.5">Customer Priority</label>
+            <div className="grid grid-cols-4 gap-2">
+              {(['Low', 'Medium', 'High', 'Critical'] as const).map(p => (
+                <button
+                  type="button"
+                  key={p}
+                  onClick={() => setPriority(p)}
+                  className={`py-1.5 px-2 rounded-xl text-xs font-semibold transition-all border ${
+                    priority === p
+                      ? p === 'Critical'
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-sm'
+                        : p === 'High'
+                        ? 'bg-orange-500/20 text-orange-300 border-orange-500/40 shadow-sm'
+                        : p === 'Medium'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                        : 'bg-slate-700/50 text-slate-200 border-slate-600 shadow-sm'
+                      : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
             </div>
           </div>
 

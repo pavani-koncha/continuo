@@ -40,6 +40,7 @@ export const Customers: React.FC<CustomersProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [healthFilter, setHealthFilter] = useState<'All' | 'Healthy' | 'Needs Attention' | 'At Risk'>('All');
+  const [priorityFilter, setPriorityFilter] = useState<'All' | 'Low' | 'Medium' | 'High' | 'Critical'>('All');
 
   const filtered = customers.filter(c => {
     const matchesSearch = 
@@ -49,7 +50,8 @@ export const Customers: React.FC<CustomersProps> = ({
       c.product.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesHealth = healthFilter === 'All' || c.health === healthFilter;
-    return matchesSearch && matchesHealth;
+    const matchesPriority = priorityFilter === 'All' || (c.priority || 'Medium') === priorityFilter;
+    return matchesSearch && matchesHealth && matchesPriority;
   });
 
   return (
@@ -58,7 +60,7 @@ export const Customers: React.FC<CustomersProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight">Customer Intelligence Profiles</h2>
-          <p className="text-xs text-slate-400 mt-1">Manage dynamic customer records with isolated persistent memory layers</p>
+          <p className="text-xs text-slate-400 mt-1">Manage dynamic customer records with isolated persistent memory layers and customer priorities</p>
         </div>
         <button
           onClick={onOpenAddCustomer}
@@ -70,8 +72,8 @@ export const Customers: React.FC<CustomersProps> = ({
       </div>
 
       {/* Controls: Search and Filter Tabs */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0f172a]/80 p-3 rounded-2xl border border-slate-800">
-        <div className="relative w-full sm:w-80">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-[#0f172a]/80 p-3 rounded-2xl border border-slate-800">
+        <div className="relative w-full lg:w-72">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -82,18 +84,38 @@ export const Customers: React.FC<CustomersProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+        {/* Health Filter */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] text-slate-500 font-medium mr-1">Health:</span>
           {(['All', 'Healthy', 'Needs Attention', 'At Risk'] as const).map(status => (
             <button
               key={status}
               onClick={() => setHealthFilter(status)}
-              className={`text-xs px-3 py-1.5 rounded-xl font-medium transition-all ${
+              className={`text-xs px-2.5 py-1 rounded-xl font-medium transition-all ${
                 healthFilter === status
                   ? 'bg-slate-800 text-white shadow-sm border border-slate-700 font-semibold'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
               {status}
+            </button>
+          ))}
+        </div>
+
+        {/* Priority Filter */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] text-slate-500 font-medium mr-1">Priority:</span>
+          {(['All', 'Critical', 'High', 'Medium', 'Low'] as const).map(p => (
+            <button
+              key={p}
+              onClick={() => setPriorityFilter(p)}
+              className={`text-xs px-2.5 py-1 rounded-xl font-medium transition-all ${
+                priorityFilter === p
+                  ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-700/60 font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              {p}
             </button>
           ))}
         </div>
@@ -112,7 +134,7 @@ export const Customers: React.FC<CustomersProps> = ({
               }`}
             >
               <div>
-                {/* Header: Name & Health Badge */}
+                {/* Header: Name, Health & Priority Badge */}
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
                     <h3 className="text-base font-bold text-white hover:text-emerald-400 transition-colors cursor-pointer"
@@ -124,15 +146,28 @@ export const Customers: React.FC<CustomersProps> = ({
                       <span>{cust.company}</span>
                     </div>
                   </div>
-                  <span className={`text-[10px] px-2.5 py-1 rounded-full font-semibold border ${
-                    cust.health === 'Healthy'
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                      : cust.health === 'Needs Attention'
-                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                  }`}>
-                    {cust.health}
-                  </span>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                      cust.health === 'Healthy'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : cust.health === 'Needs Attention'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                    }`}>
+                      {cust.health}
+                    </span>
+                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
+                      cust.priority === 'Critical'
+                        ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                        : cust.priority === 'High'
+                        ? 'bg-orange-500/15 text-orange-300 border-orange-500/30'
+                        : cust.priority === 'Low'
+                        ? 'bg-slate-700/30 text-slate-400 border-slate-700/50'
+                        : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    }`}>
+                      {cust.priority || 'Medium'} Priority
+                    </span>
+                  </div>
                 </div>
 
                 {/* Details */}
@@ -147,10 +182,22 @@ export const Customers: React.FC<CustomersProps> = ({
                   </div>
                 </div>
 
+                {/* Pending Tasks Count if Any */}
+                {cust.followUpTasks && cust.followUpTasks.some(t => t.status === 'pending') && (
+                  <div className="mb-3 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-center justify-between">
+                    <span className="font-medium">Follow-up Tasks</span>
+                    <span className="font-mono font-bold">
+                      {cust.followUpTasks.filter(t => t.status === 'pending').length} pending
+                    </span>
+                  </div>
+                )}
+
                 {/* AI Summary Quote */}
                 <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80 text-[11px] text-slate-300 leading-relaxed mb-4">
-                  <span className="text-emerald-400 font-semibold block text-[10px] uppercase mb-0.5">Living Intelligence Summary</span>
-                  {cust.summary || 'Customer profile created. Ready for conversational intake and persistent memory capture.'}
+                  <span className="text-emerald-400 font-semibold block text-[10px] uppercase mb-0.5">
+                    {cust.conversationSummary ? 'AI Conversation Summary' : 'Living Intelligence Summary'}
+                  </span>
+                  {cust.conversationSummary || cust.summary || 'Customer profile created. Ready for conversational intake and persistent memory capture.'}
                 </div>
 
                 {/* Tags */}

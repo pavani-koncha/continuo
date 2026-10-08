@@ -1,4 +1,5 @@
 export type CustomerHealth = 'Healthy' | 'Needs Attention' | 'At Risk';
+export type CustomerPriority = 'Low' | 'Medium' | 'High' | 'Critical';
 
 export interface User {
   id: string;
@@ -14,6 +15,17 @@ export interface AuthUser {
   email: string;
 }
 
+export interface FollowUpTask {
+  id: string;
+  userId?: string;
+  customerId: string;
+  title: string;
+  dueDate?: string;
+  status: 'pending' | 'completed';
+  priority: 'low' | 'medium' | 'high';
+  createdAt: string;
+}
+
 export interface Customer {
   id: string;
   userId?: string;
@@ -25,7 +37,10 @@ export interface Customer {
   tags: string[];
   health: CustomerHealth;
   healthReason: string;
+  priority: CustomerPriority;
   summary: string;
+  conversationSummary?: string;
+  followUpTasks?: FollowUpTask[];
   createdAt: string;
   updatedAt: string;
 }
@@ -124,4 +139,50 @@ export interface DashboardStats {
   openIssues: number;
   customersNeedingAttention: number;
   recentActivity: TimelineEvent[];
+}
+
+export interface InsightsData {
+  totalCustomers: number;
+  openIssuesCount: number;
+  resolvedIssuesCount: number;
+  customersNeedingAttention: Array<{
+    id: string;
+    name: string;
+    company: string;
+    health: CustomerHealth;
+    priority: CustomerPriority;
+    healthReason: string;
+    openIssuesCount: number;
+    memoryCount: number;
+  }>;
+  openIssuesList: UnresolvedIssue[];
+  memoryCategoryCounts: Record<string, number>;
+  recentMemories: MemoryItem[];
+  // Dynamic Charting Datasets
+  healthDistribution: {
+    healthy: number;
+    needsAttention: number;
+    atRisk: number;
+  };
+  issueSeverityDistribution: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  issuesStatusDistribution: {
+    open: number;
+    resolved: number;
+  };
+  activityOverTime: Array<{
+    date: string;
+    count: number;
+    label: string;
+  }>;
+  priorityDistribution: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
 }

@@ -106,6 +106,7 @@ export const api = {
     company: string;
     email: string;
     product?: string;
+    priority?: import('../types').CustomerPriority;
     initialNotes?: string;
     tags?: string[];
   }): Promise<Customer> {
@@ -122,6 +123,24 @@ export const api = {
       method: 'PUT',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data)
+    });
+    return handleResponse<Customer>(res);
+  },
+
+  async addCustomerTask(customerId: string, data: { title: string; dueDate?: string; priority?: 'low' | 'medium' | 'high' }): Promise<Customer> {
+    const res = await fetch(`${API_PREFIX}/customers/${customerId}/tasks`, {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse<Customer>(res);
+  },
+
+  async toggleCustomerTask(customerId: string, taskId: string, status?: 'pending' | 'completed'): Promise<Customer> {
+    const res = await fetch(`${API_PREFIX}/customers/${customerId}/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ status })
     });
     return handleResponse<Customer>(res);
   },

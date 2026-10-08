@@ -167,14 +167,14 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   };
 
-  // Demo presets for easy testing
+  // Demo presets for easy testing (both general knowledge & customer-specific)
   const demoPrompts = [
-    { label: '1. Security Review Requirement', text: 'We need a security review before signing the contract.' },
+    { label: '1. Security Review Context', text: 'We need a security review before signing the contract.' },
     { label: '2. Contract Signing Query', text: 'Can we sign the contract today?' },
-    { label: '3. AWS Infrastructure Context', text: 'Our production environment is running on AWS.' },
-    { label: '4. Login Issue Report', text: 'Our team is experiencing login failures blocking access.' },
-    { label: '5. Issue Fixed Confirmation', text: 'The login issue is resolved and working now.' },
-    { label: '6. Communication Preference', text: 'We prefer email communication for all updates.' }
+    { label: '3. General: Cloud Computing', text: 'What is cloud computing?' },
+    { label: '4. General: Anger Control', text: 'How to control anger?' },
+    { label: '5. General: Password Reset', text: 'How do I reset my password?' },
+    { label: '6. AWS Infrastructure', text: 'Our production environment is running on AWS.' }
   ];
 
   if (!selectedCustomer) {

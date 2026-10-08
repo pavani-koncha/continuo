@@ -1,4 +1,15 @@
 export type CustomerHealth = 'Healthy' | 'Needs Attention' | 'At Risk';
+export type CustomerPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export interface FollowUpTask {
+  id: string;
+  customerId: string;
+  title: string;
+  dueDate?: string;
+  status: 'pending' | 'completed';
+  priority: 'low' | 'medium' | 'high';
+  createdAt: string;
+}
 
 export interface User {
   id: string;
@@ -21,8 +32,11 @@ export interface Customer {
   initialNotes: string;
   tags: string[];
   health: CustomerHealth;
+  priority?: CustomerPriority;
   healthReason: string;
   summary: string;
+  conversationSummary?: string;
+  followUpTasks?: FollowUpTask[];
   createdAt: string;
   updatedAt: string;
 }
@@ -146,6 +160,7 @@ export interface InsightsData {
     name: string;
     company: string;
     health: CustomerHealth;
+    priority?: CustomerPriority;
     healthReason: string;
     openIssuesCount: number;
     memoryCount: number;
@@ -153,4 +168,30 @@ export interface InsightsData {
   openIssuesList: UnresolvedIssue[];
   memoryCategoryCounts: Record<string, number>;
   recentMemories: MemoryItem[];
+  healthDistribution?: {
+    healthy: number;
+    needsAttention: number;
+    atRisk: number;
+  };
+  issueSeverityDistribution?: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  issuesStatusDistribution?: {
+    open: number;
+    resolved: number;
+  };
+  activityOverTime?: Array<{
+    date: string;
+    count: number;
+    label: string;
+  }>;
+  priorityDistribution?: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
 }

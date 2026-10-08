@@ -60,6 +60,7 @@ router.get('/insights', (req: AuthenticatedRequest, res: Response) => {
     const memories = storageService.getMemories(undefined, userId);
     const issues = storageService.getIssues(undefined, userId);
     const conversations = storageService.getConversations(undefined, userId);
+    const timeline = storageService.getTimeline(undefined, userId);
 
     const openIssues = issues.filter(i => i.status === 'open');
     const resolvedIssues = issues.filter(i => i.status === 'resolved');
@@ -77,11 +78,80 @@ router.get('/insights', (req: AuthenticatedRequest, res: Response) => {
         name: c.name,
         company: c.company,
         health: c.health,
+        priority: c.priority || 'Medium',
         healthReason: c.healthReason,
         openIssuesCount: custIssues.length,
         memoryCount: custMems.length
       };
     });
+
+    // Real dynamic chart data
+    const healthDistribution = {
+      healthy: customers.filter(c => c.health === 'Healthy').length,
+      needsAttention: customers.filter(c => c.health === 'Needs Attention').length,
+      atRisk: customers.filter(c => c.health === 'At Risk').length,
+    };
+
+    const issueSeverityDistribution = {
+      critical: issues.filter(i => i.severity === 'critical').length,
+      high: issues.filter(i => i.severity === 'high').length,
+      medium: issues.filter(i => i.severity === 'medium').length,
+      low: issues.filter(i => i.severity === 'low').length,
+    };
+
+    const issuesStatusDistribution = {
+      open: openIssues.length,
+      resolved: resolvedIssues.length,
+    };
+
+    const priorityDistribution = {
+      critical: customers.filter(c => (c.priority || 'Medium') === 'Critical').length,
+      high: customers.filter(c => (c.priority || 'Medium') === 'High').length,
+      medium: customers.filter(c => (c.priority || 'Medium') === 'Medium').length,
+      low: customers.filter(c => (c.priority || 'Medium') === 'Low').length,
+    };
+
+    // Support activity over time (last 7 days from actual timeline and message events)
+    const now = new Date();
+    const activityMap: Record<string, number> = {};
+    const days: Array<{ date: string; label: string }> = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const isoDate = d.toISOString().split('T')[0];
+      const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+      activityMap[isoDate] = 0;
+      days.push({ date: isoDate, label });
+    }
+
+    // Count timeline events
+    for (const ev of timeline) {
+      if (ev.timestamp) {
+        const dStr = ev.timestamp.split('T')[0];
+        if (activityMap[dStr] !== undefined) {
+          activityMap[dStr]++;
+        }
+      }
+    }
+
+    // Also include conversation messages in activity
+    for (const conv of conversations) {
+      for (const msg of conv.messages) {
+        if (msg.timestamp) {
+          const dStr = msg.timestamp.split('T')[0];
+          if (activityMap[dStr] !== undefined) {
+            activityMap[dStr]++;
+          }
+        }
+      }
+    }
+
+    const activityOverTime = days.map(day => ({
+      date: day.date,
+      count: activityMap[day.date] || 0,
+      label: day.label,
+    }));
 
     res.json({
       totalCustomers: customers.length,
@@ -90,7 +160,12 @@ router.get('/insights', (req: AuthenticatedRequest, res: Response) => {
       customersNeedingAttention,
       openIssuesList: openIssues.slice(0, 10),
       memoryCategoryCounts,
-      recentMemories: memories.slice(0, 8)
+      recentMemories: memories.slice(0, 8),
+      healthDistribution,
+      issueSeverityDistribution,
+      issuesStatusDistribution,
+      activityOverTime,
+      priorityDistribution
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch insights', details: err.message });

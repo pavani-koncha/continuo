@@ -181,20 +181,10 @@ export class HindsightService {
     // If matches found with score > 0, return top matches
     const topMatches = scored.filter(s => s.score > 0).slice(0, topK);
     
-    // If no strong keyword match was found but query is general, return recent significant memories (Requirements, Issues)
+    // If no strong match was found (e.g. general question unrelated to customer history),
+    // return empty array so unrelated customer memories are NOT forced into the response.
     if (topMatches.length === 0) {
-      const priorityMemories = customerMemories
-        .filter(m => m.category === 'Requirement' || m.category === 'Issue')
-        .slice(0, 2);
-
-      return priorityMemories.map(m => ({
-        id: m.id,
-        content: m.content,
-        category: m.category,
-        source: m.source,
-        timestamp: m.timestamp,
-        relevanceReason: `Prior customer ${m.category.toLowerCase()} on record`
-      }));
+      return [];
     }
 
     return topMatches.map(s => ({
