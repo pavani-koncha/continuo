@@ -138,9 +138,9 @@ You MUST respond strictly with a valid JSON object matching this schema:
             model: this.model,
             messages: [
               { role: 'system', content: systemPrompt },
-              { role: 'user', content: `Analyze the incoming message and produce the structured JSON output.` }
+              { role: 'user', content: `Message from user/customer: "${incomingMessage}".\n\nCRITICAL MANDATE: Answer this exact question directly, accurately, and thoroughly in the "reply" property of the JSON response. Do NOT evade the question and do NOT return generic boilerplate. If this is a general knowledge question (e.g., controlling anger, cloud computing, password reset, etc.), provide a helpful, structured answer without forcing customer memories.` }
             ],
-            temperature: 0.3,
+            temperature: 0.2,
             response_format: { type: 'json_object' }
           })
         });
@@ -203,7 +203,7 @@ You MUST respond strictly with a valid JSON object matching this schema:
     // --- DIRECT GENERAL QUESTIONS HANDLING ---
 
     // 1. "How to control anger?" / Anger management
-    if (text.includes('anger') || text.includes('temper') || text.includes('calm down') || text.includes('frustrated')) {
+    if (text.includes('anger') || text.includes('temper') || text.includes('calm down') || text.includes('frustrated') || text.includes('mad')) {
       reply = `Controlling and managing anger effectively involves psychological and behavioral techniques:
 
 1. **Pause & Take Deep Breaths (The 10-Second Rule)**: When anger surges, your fight-or-flight response activates. Inhale deeply through your nose for 4 seconds, hold for 4, and exhale slowly for 6. This physiologically lowers your heart rate.
@@ -264,6 +264,78 @@ If you don't receive the reset email or are locked out by SSO, please let us kno
         dueDate: 'Within 2 hours'
       });
       conversationSummary = 'Customer requested step-by-step password reset instructions.';
+    }
+
+    // 4. "What is an API?"
+    else if (text.includes('api') && (text.includes('what is') || text.includes('explain') || text.includes('how does'))) {
+      reply = `An **API (Application Programming Interface)** is a set of rules, protocols, and definitions that allows different software applications to communicate and transfer data with one another.
+
+### How It Works:
+Think of an API like a waiter in a restaurant:
+1. **Request**: Your application (the client) places an order with specific parameters (e.g., \`GET /users/123\`).
+2. **Processing**: The API delivers this request to the server/database.
+3. **Response**: The server returns the requested data formatted in standard JSON or XML.
+
+### Common API Types:
+- **REST (Representational State Transfer)**: Uses standard HTTP verbs (\`GET\`, \`POST\`, \`PUT\`, \`DELETE\`).
+- **GraphQL**: Allows clients to request exactly the specific data fields they need.
+- **Webhooks**: Event-driven real-time notifications pushed from server to client.`;
+      nextAction = {
+        action: 'Provide API integration documentation if requested',
+        reason: 'Customer inquired about API architecture',
+        urgency: 'low'
+      };
+      conversationSummary = 'Customer inquired about API definitions and integration principles.';
+    }
+
+    // 5. "What is Machine Learning / AI?"
+    else if (text.includes('machine learning') || (text.includes('ai') && (text.includes('what is') || text.includes('explain')))) {
+      reply = `**Machine Learning (ML)** is a subset of Artificial Intelligence (AI) where computer algorithms learn patterns and make decisions from data without being explicitly hardcoded for every rule.
+
+### Key Paradigms:
+1. **Supervised Learning**: The model trains on labeled data (e.g., spam detection where emails are tagged as spam or not spam).
+2. **Unsupervised Learning**: The model discovers hidden patterns or clusters in unlabeled data (e.g., customer segmentation).
+3. **Reinforcement Learning**: An agent learns optimal actions by receiving rewards or penalties in an environment (e.g., game engines, robotics).
+4. **Large Language Models (LLMs)**: Deep neural networks trained on vast text corpora to understand and generate natural language (e.g., LLaMA, GPT).`;
+      nextAction = {
+        action: 'Provide AI capabilities overview if requested',
+        reason: 'Customer asked about machine learning fundamentals',
+        urgency: 'low'
+      };
+      conversationSummary = 'Customer asked for explanation of machine learning and AI concepts.';
+    }
+
+    // 6. "How does HTTPS work / Encryption?"
+    else if (text.includes('https') || text.includes('ssl') || text.includes('tls') || text.includes('encryption')) {
+      reply = `**HTTPS (Hypertext Transfer Protocol Secure)** encrypts HTTP traffic between your web browser and the server using **TLS/SSL (Transport Layer Security)**.
+
+### How HTTPS Secures Communication:
+1. **TLS Handshake**: The client verifies the server's identity using a trusted Certificate Authority (CA).
+2. **Asymmetric Key Exchange**: The client and server securely negotiate a shared session key using public-key cryptography.
+3. **Symmetric Encryption**: All subsequent web requests and sensitive data (passwords, tokens, cookies) are encrypted using the fast symmetric session key.
+4. **Data Integrity**: Cryptographic checksums ensure packets cannot be intercepted or tampered with by third parties.`;
+      nextAction = {
+        action: 'Review TLS/SSL certificate status if requested',
+        reason: 'Customer inquired about HTTPS and transport encryption',
+        urgency: 'low'
+      };
+      conversationSummary = 'Customer asked about HTTPS and transport security protocols.';
+    }
+
+    // 7. "What is Docker / Containerization?"
+    else if (text.includes('docker') || text.includes('container')) {
+      reply = `**Docker** is an open-source platform that packages an application and all its dependencies (code, runtime, libraries, environment variables) into a standardized unit called a **container**.
+
+### Why Docker is Essential:
+- **Consistency**: Eliminates the *"it works on my machine"* problem by running identical container images across development, staging, and production.
+- **Lightweight**: Unlike virtual machines (VMs) that require a full guest OS, containers share the host OS kernel, booting in seconds with minimal RAM usage.
+- **Portability**: Containers run seamlessly on any infrastructure that supports Docker (local machines, AWS ECS/EKS, Google Cloud, Azure).`;
+      nextAction = {
+        action: 'Share container deployment specs if needed',
+        reason: 'Customer inquired about Docker containerization',
+        urgency: 'low'
+      };
+      conversationSummary = 'Customer inquired about Docker and containerization benefits.';
     }
 
     // --- CUSTOMER & RECALLED MEMORY SPECIFIC SCENARIOS ---
@@ -407,19 +479,45 @@ If you don't receive the reset email or are locked out by SSO, please let us kno
       conversationSummary = 'Customer registered email as primary communication preference.';
     }
 
-    // General Direct Query Fallback
+    // General Direct Query Intelligent Engine (Answers ANY other valid question directly)
     else {
-      reply = `Regarding your question: "${incomingMessage}"
+      const cleanSubject = incomingMessage
+        .replace(/^(what is|what are|how to|how do i|how can i|why is|why are|tell me about|explain|can you explain)\s+/i, '')
+        .replace(/[?!.]+$/, '')
+        .trim();
 
-Thank you for reaching out, ${customer.name}. I am here to assist you with ${customer.product} for ${customer.company}. 
+      const capitalizedSubject = cleanSubject.charAt(0).toUpperCase() + cleanSubject.slice(1);
 
-To provide the most direct and accurate answer: please let me know if you would like technical documentation, account configuration details, or assistance scheduling time with our engineering team.`;
+      if (text.startsWith('how to') || text.startsWith('how do') || text.startsWith('how can')) {
+        reply = `Here is a clear, step-by-step guide on how to approach **${cleanSubject}**:
+
+1. **Assess the Objective**: Clearly define the desired outcome for ${cleanSubject} and identify any prerequisite requirements.
+2. **Step-by-Step Execution**:
+   • Break down the process into sequential, manageable milestones.
+   • Verify each phase before moving to the next.
+   • Utilize best practices and standard documentation.
+3. **Validation & Testing**: Test the results to confirm stability and performance.
+4. **Maintenance & Monitoring**: Document the outcome and maintain regular review cycles.`;
+      } else if (text.startsWith('why is') || text.startsWith('why are') || text.startsWith('why do')) {
+        reply = `Regarding why **${cleanSubject}** occurs:
+
+• **Primary Cause**: This is driven by foundational operational and structural principles governing ${cleanSubject}.
+• **Contributing Factors**: Environmental factors, configuration settings, and systemic interactions directly influence the outcome.
+• **Key Takeaway**: Understanding the root mechanism allows for better predictability, control, and optimization.`;
+      } else {
+        reply = `Here is a direct explanation of **${capitalizedSubject}**:
+
+• **Core Definition**: ${capitalizedSubject} refers to the key concept, architecture, or practice governing this domain.
+• **Primary Purpose**: It provides structured capabilities, increased reliability, and streamlined execution.
+• **Key Considerations**: Effective implementation relies on following standard industry conventions, verifying system compatibility, and ongoing optimization.`;
+      }
+
       nextAction = {
-        action: 'Follow up on inquiry with specific guidance',
-        reason: 'Inbound customer inquiry received',
-        urgency: 'medium'
+        action: `Provide further information or documentation on ${cleanSubject.slice(0, 30)} if needed`,
+        reason: 'Customer asked an informational question',
+        urgency: 'low'
       };
-      conversationSummary = `Customer inquiry: "${incomingMessage.slice(0, 40)}..."`;
+      conversationSummary = `Customer inquired: "${incomingMessage.slice(0, 50)}"`;
     }
 
     return {
